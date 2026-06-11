@@ -1,0 +1,105 @@
+{
+  "meta": {
+    "name": "World Cup 2026 Sweepstake",
+    "season": 2026,
+    "note": "Edit this file to change owners/teams. 'aliases' are alternative names API-Football may use — matching is accent/case-insensitive. 'group' is optional; if blank the app fills it from the API standings."
+  },
+  "participants": [
+    {
+      "name": "Gurj",
+      "color": "#fbbf24",
+      "teams": [
+        { "name": "Argentina", "code": "ARG", "flag": "🇦🇷" },
+        { "name": "Belgium", "code": "BEL", "flag": "🇧🇪" },
+        { "name": "Japan", "code": "JPN", "flag": "🇯🇵" },
+        { "name": "Sweden", "code": "SWE", "flag": "🇸🇪" },
+        { "name": "Qatar", "code": "QAT", "flag": "🇶🇦" },
+        { "name": "New Zealand", "code": "NZL", "flag": "🇳🇿" }
+      ]
+    },
+    {
+      "name": "Daaaaave",
+      "color": "#f87171",
+      "teams": [
+        { "name": "Spain", "code": "ESP", "flag": "🇪🇸" },
+        { "name": "Croatia", "code": "CRO", "flag": "🇭🇷" },
+        { "name": "Switzerland", "code": "SUI", "flag": "🇨🇭" },
+        { "name": "Panama", "code": "PAN", "flag": "🇵🇦" },
+        { "name": "Paraguay", "code": "PAR", "flag": "🇵🇾" },
+        { "name": "Saudi Arabia", "code": "KSA", "flag": "🇸🇦" }
+      ]
+    },
+    {
+      "name": "Herbie J",
+      "color": "#60a5fa",
+      "teams": [
+        { "name": "France", "code": "FRA", "flag": "🇫🇷" },
+        { "name": "Colombia", "code": "COL", "flag": "🇨🇴" },
+        { "name": "South Korea", "code": "KOR", "flag": "🇰🇷", "aliases": ["Korea Republic"] },
+        { "name": "Algeria", "code": "ALG", "flag": "🇩🇿" },
+        { "name": "Uzbekistan", "code": "UZB", "flag": "🇺🇿" },
+        { "name": "Bosnia & Herzegovina", "code": "BIH", "flag": "🇧🇦", "aliases": ["Bosnia and Herzegovina", "Bosnia-Herzegovina", "Bosnia"] }
+      ]
+    },
+    {
+      "name": "Herbie",
+      "color": "#34d399",
+      "teams": [
+        { "name": "England", "code": "ENG", "flag": "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
+        { "name": "Senegal", "code": "SEN", "flag": "🇸🇳" },
+        { "name": "Austria", "code": "AUT", "flag": "🇦🇹" },
+        { "name": "Canada", "code": "CAN", "flag": "🇨🇦" },
+        { "name": "Scotland", "code": "SCO", "flag": "🏴󠁧󠁢󠁳󠁣󠁴󠁿" },
+        { "name": "Haiti", "code": "HAI", "flag": "🇭🇹" }
+      ]
+    },
+    {
+      "name": "Harry",
+      "color": "#c084fc",
+      "teams": [
+        { "name": "Portugal", "code": "POR", "flag": "🇵🇹" },
+        { "name": "Uruguay", "code": "URU", "flag": "🇺🇾" },
+        { "name": "Australia", "code": "AUS", "flag": "🇦🇺" },
+        { "name": "Egypt", "code": "EGY", "flag": "🇪🇬" },
+        { "name": "Tunisia", "code": "TUN", "flag": "🇹🇳" },
+        { "name": "Curaçao", "code": "CUW", "flag": "🇨🇼", "aliases": ["Curacao"] }
+      ]
+    },
+    {
+      "name": "Kully",
+      "color": "#fb923c",
+      "teams": [
+        { "name": "Brazil", "code": "BRA", "flag": "🇧🇷" },
+        { "name": "Morocco", "code": "MAR", "flag": "🇲🇦" },
+        { "name": "Turkey", "code": "TUR", "flag": "🇹🇷", "aliases": ["Türkiye", "Turkiye"] },
+        { "name": "Norway", "code": "NOR", "flag": "🇳🇴" },
+        { "name": "Iraq", "code": "IRQ", "flag": "🇮🇶" },
+        { "name": "Jordan", "code": "JOR", "flag": "🇯🇴" }
+      ]
+    },
+    {
+      "name": "Bob",
+      "color": "#38bdf8",
+      "teams": [
+        { "name": "Germany", "code": "GER", "flag": "🇩🇪" },
+        { "name": "Mexico", "code": "MEX", "flag": "🇲🇽" },
+        { "name": "Iran", "code": "IRN", "flag": "🇮🇷", "aliases": ["IR Iran"] },
+        { "name": "Ivory Coast", "code": "CIV", "flag": "🇨🇮", "aliases": ["Cote d'Ivoire", "Côte d'Ivoire"] },
+        { "name": "South Africa", "code": "RSA", "flag": "🇿🇦" },
+        { "name": "Ghana", "code": "GHA", "flag": "🇬🇭" }
+      ]
+    },
+    {
+      "name": "Roda",
+      "color": "#f472b6",
+      "teams": [
+        { "name": "Netherlands", "code": "NED", "flag": "🇳🇱" },
+        { "name": "United States", "code": "USA", "flag": "🇺🇸", "aliases": ["USA", "United States of America"] },
+        { "name": "Ecuador", "code": "ECU", "flag": "🇪🇨" },
+        { "name": "Czech Republic", "code": "CZE", "flag": "🇨🇿", "aliases": ["Czechia"] },
+        { "name": "DR Congo", "code": "COD", "flag": "🇨🇩", "aliases": ["Congo DR", "Democratic Republic of Congo", "Congo-Kinshasa"] },
+        { "name": "Cape Verde", "code": "CPV", "flag": "🇨🇻", "aliases": ["Cape Verde Islands", "Cabo Verde"] }
+      ]
+    }
+  ]
+}

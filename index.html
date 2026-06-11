@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World Cup 2026 Sweepstake</title>
+<meta name="description" content="Live World Cup 2026 sweepstake dashboard — 8 owners, 48 teams, one trophy.">
+<meta name="theme-color" content="#06321e">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap" rel="stylesheet">
+<script defer src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+<style>
+/* ============================================================
+   THEME — dark stadium / pitch aesthetic
+   ============================================================ */
+:root{
+  --pitch-1:#052b1a; --pitch-2:#0a4528; --pitch-3:#0d5530;
+  --panel:rgba(8,38,23,.78); --panel-solid:#0a3320;
+  --line:rgba(255,255,255,.09); --line-strong:rgba(255,255,255,.18);
+  --txt:#eef5f0; --muted:#9db8aa; --dim:#6e8a7c;
+  --accent:#4ade80; --hot:#fb923c; --danger:#ef4444;
+  --gold:#fbbf24; --silver:#cbd5e1; --bronze:#d97706;
+  --display:'Russo One',system-ui,sans-serif;
+  --body:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --radius:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--body);color:var(--txt);min-height:100vh;
+  background:linear-gradient(160deg,var(--pitch-1) 0%,var(--pitch-2) 55%,var(--pitch-1) 100%);
+  background-attachment:fixed;
+  -webkit-font-smoothing:antialiased;
+}
+/* Pitch markings: mowing stripes, halfway line, centre circle */
+body::before{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(circle at 50% 42vh,transparent 0 117px,rgba(255,255,255,.055) 117px 120px,transparent 120px),
+    radial-gradient(circle at 50% 42vh,rgba(255,255,255,.05) 0 4px,transparent 5px),
+    linear-gradient(rgba(255,255,255,.05),rgba(255,255,255,.05)) 0 42vh/100% 2px no-repeat,
+    repeating-linear-gradient(90deg,rgba(255,255,255,.016) 0 90px,transparent 90px 180px);
+}
+main{max-width:1180px;margin:0 auto;padding:0 14px 60px}
+h2{font-family:var(--display);font-size:1.15rem;letter-spacing:.04em;margin-bottom:14px;color:var(--txt)}
+button{font-family:inherit;cursor:pointer}
+.scoreboard{font-family:var(--display);font-variant-numeric:tabular-nums;letter-spacing:.06em}
+
+/* ============ API warning banner ============ */
+.api-warn{
+  background:#7c2d12;color:#fed7aa;font-size:.85rem;text-align:center;
+  padding:7px 14px;border-bottom:1px solid #9a3412;
+}
+
+/* ============ Header ============ */
+.hdr{padding:20px 16px 12px;max-width:1180px;margin:0 auto}
+.hdr-top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px}
+.host-flags{font-size:1.2rem;letter-spacing:.18em;display:block;margin-bottom:4px}
+.hdr h1{
+  font-family:var(--display);font-size:clamp(1.45rem,4.5vw,2.4rem);line-height:1.08;
+  background:linear-gradient(92deg,#fff 30%,var(--gold) 70%,#f59e0b);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+}
+.hdr-meta{text-align:right;font-size:.8rem;color:var(--muted)}
+.day-ind{font-family:var(--display);color:var(--accent);font-size:.85rem;letter-spacing:.05em}
+.last-upd{margin-top:3px}
+.countdown{
+  margin-top:14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px 16px;
+}
+.cd-label{font-family:var(--display);font-size:.7rem;color:var(--hot);letter-spacing:.14em}
+.cd-match{font-size:.92rem;color:var(--txt)}
+.cd-clock{font-size:1.5rem;color:var(--gold);margin-left:auto}
+
+/* ============ News ticker ============ */
+.ticker{
+  overflow:hidden;background:rgba(0,0,0,.42);border-block:1px solid var(--line);
+  padding:8px 0;margin-bottom:22px;
+}
+.ticker-track{display:inline-flex;white-space:nowrap;will-change:transform;animation:tickerScroll 60s linear infinite}
+.ticker:hover .ticker-track{animation-play-state:paused}
+.tick-item{padding:0 34px;font-size:.9rem;color:var(--txt)}
+.tick-item b{color:var(--gold)}
+@keyframes tickerScroll{to{transform:translateX(-50%)}}
+
+/* ============ Panels ============ */
+.panel{
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:18px 16px;margin-bottom:22px;backdrop-filter:blur(3px);
+}
+
+/* ============ Head-to-head spotlight ============ */
+.spotlight{border-color:rgba(251,146,60,.45);box-shadow:0 0 28px rgba(251,146,60,.08)}
+.spot-carousel{display:flex;align-items:stretch;gap:8px}
+.spot-nav{
+  background:none;border:1px solid var(--line);color:var(--muted);border-radius:10px;
+  font-size:1.3rem;padding:0 12px;transition:.2s;flex:none;
+}
+.spot-nav:hover{color:var(--txt);border-color:var(--line-strong)}
+.spot-slide{flex:1;min-width:0;text-align:center;padding:6px 4px}
+.spot-tag{font-family:var(--display);font-size:.72rem;letter-spacing:.16em;color:var(--hot);margin-bottom:8px}
+.spot-teams{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap}
+.spot-side{min-width:110px}
+.spot-flag{font-size:2.1rem;display:block}
+.spot-team{font-weight:700;font-size:.98rem}
+.spot-score{font-size:2rem;color:var(--gold);min-width:90px}
+.spot-when{font-size:.85rem;color:var(--muted);margin-top:8px}
+.spot-detail{font-size:.8rem;color:var(--muted);margin-top:6px;line-height:1.5}
+.spot-dots{text-align:center;margin-top:10px}
+.spot-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--dim);margin:0 4px;cursor:pointer}
+.spot-dot.on{background:var(--hot)}
+.owner-chip{
+  display:inline-block;padding:1px 9px;border-radius:99px;font-size:.72rem;font-weight:700;
+  color:#08130c;line-height:1.5;vertical-align:middle;
+}
+
+/* ============ The Grid (participant cards) ============ */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(295px,1fr));gap:14px}
+.card{
+  background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,0) 38%),var(--panel-solid);
+  border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+  transition:transform .22s,box-shadow .22s,border-color .22s;
+}
+.card:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(0,0,0,.35)}
+.card.live{animation:liveGlow 2.2s ease-in-out infinite;border-color:rgba(74,222,128,.6)}
+@keyframes liveGlow{
+  0%,100%{box-shadow:0 0 6px rgba(74,222,128,.25)}
+  50%{box-shadow:0 0 22px rgba(74,222,128,.6)}
+}
+.card.trophy-shake{animation:trophyShake .7s ease-in-out 2}
+@keyframes trophyShake{
+  0%,100%{transform:rotate(0)}20%{transform:rotate(-2.4deg)}40%{transform:rotate(2.4deg)}
+  60%{transform:rotate(-1.6deg)}80%{transform:rotate(1.6deg)}
+}
+.card-head{display:flex;align-items:center;gap:10px;padding:11px 13px;border-bottom:1px solid var(--line)}
+.avatar{
+  width:34px;height:34px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;
+  font-family:var(--display);font-size:.85rem;color:#08130c;
+}
+.card-name{font-family:var(--display);font-size:1rem;letter-spacing:.03em;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card-rank{font-size:.72rem;color:var(--muted)}
+.card-pts{font-family:var(--display);font-size:1.35rem;color:var(--gold)}
+.team-row{
+  display:flex;align-items:center;gap:8px;padding:7px 13px;font-size:.86rem;
+  border-bottom:1px solid rgba(255,255,255,.04);
+}
+.team-row:last-child{border-bottom:0}
+.t-flag{font-size:1.05rem;flex:none;width:24px;text-align:center}
+.t-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.t-grp{font-size:.68rem;color:var(--dim);flex:none;width:18px;text-align:center}
+.t-status{flex:none;font-size:.74rem;color:var(--muted);text-align:right;max-width:104px}
+.t-status .live-dot{color:#f87171;animation:blink 1.2s steps(2) infinite}
+@keyframes blink{50%{opacity:.25}}
+.t-pts{flex:none;width:34px;text-align:right;font-family:var(--display);font-size:.84rem;color:var(--accent)}
+.team-row.out{opacity:.42}
+.team-row.out .t-name{text-decoration:line-through}
+
+/* ============ Leaderboard ============ */
+.lb-table{width:100%;border-collapse:collapse;font-size:.9rem}
+.lb-table th{
+  text-align:left;font-family:var(--display);font-size:.68rem;letter-spacing:.12em;
+  color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line-strong);
+}
+.lb-table td{padding:9px 8px;border-bottom:1px solid var(--line)}
+.lb-row{cursor:pointer;transition:background .15s}
+.lb-row:hover{background:rgba(255,255,255,.04)}
+.lb-rank{font-family:var(--display);width:40px}
+.lb-row.gold .lb-rank{color:var(--gold)}
+.lb-row.silver .lb-rank{color:var(--silver)}
+.lb-row.bronze .lb-rank{color:var(--bronze)}
+.lb-row.gold td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
+.lb-row.silver td:first-child{box-shadow:inset 3px 0 0 var(--silver)}
+.lb-row.bronze td:first-child{box-shadow:inset 3px 0 0 var(--bronze)}
+.lb-pts{font-family:var(--display);color:var(--gold);text-align:right}
+.lb-num{text-align:right;color:var(--muted)}
+.lb-break td{background:rgba(0,0,0,.28);font-size:.8rem;padding:10px 14px}
+.lb-break ul{list-style:none}
+.lb-break li{padding:2.5px 0;color:var(--muted);display:flex;justify-content:space-between;gap:10px}
+.lb-break li b{color:var(--txt);font-weight:600}
+.lb-break .bk-pts{color:var(--accent);font-family:var(--display);flex:none}
+.lb-break .bk-team{font-family:var(--display);font-size:.78rem;color:var(--gold);margin-top:8px}
+.lb-hint{font-size:.72rem;color:var(--dim);margin-top:8px}
+
+/* ============ Fixtures ============ */
+.tabs{display:flex;gap:6px;margin-bottom:12px}
+.tab{
+  background:none;border:1px solid var(--line);color:var(--muted);border-radius:99px;
+  padding:5px 16px;font-size:.82rem;transition:.18s;
+}
+.tab.active{background:var(--accent);border-color:var(--accent);color:#08130c;font-weight:700}
+.fx-day{font-family:var(--display);font-size:.72rem;letter-spacing:.1em;color:var(--muted);margin:14px 0 4px}
+.fx-row{
+  display:flex;align-items:center;gap:8px;padding:9px 6px;font-size:.88rem;
+  border-bottom:1px solid rgba(255,255,255,.05);flex-wrap:wrap;
+}
+.fx-team{flex:1;min-width:118px;display:flex;align-items:center;gap:6px}
+.fx-team.away{justify-content:flex-end;text-align:right}
+.fx-team .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fx-mid{flex:none;width:88px;text-align:center}
+.fx-score{font-family:var(--display);font-size:1.02rem}
+.fx-score.live{color:#f87171}
+.fx-time{font-size:.8rem;color:var(--muted)}
+.fx-st{display:block;font-size:.64rem;color:var(--dim);letter-spacing:.08em;margin-top:1px}
+.fx-fire{flex:none}
+.fx-empty{color:var(--muted);font-size:.88rem;padding:14px 4px}
+
+/* ============ Stats corner ============ */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:12px}
+.stat-card{
+  background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;
+}
+.stat-emoji{font-size:1.7rem}
+.stat-title{font-family:var(--display);font-size:.72rem;letter-spacing:.1em;color:var(--muted);margin:6px 0 4px}
+.stat-who{font-weight:700;font-size:1.02rem}
+.stat-val{font-size:.8rem;color:var(--accent);margin-top:2px}
+
+/* ============ Toasts ============ */
+#toasts{position:fixed;top:14px;right:14px;z-index:90;display:flex;flex-direction:column;gap:8px;max-width:min(360px,calc(100vw - 28px))}
+.toast{
+  background:#0c2417;border:1px solid var(--line-strong);border-left:4px solid var(--accent);
+  border-radius:10px;padding:11px 14px;font-size:.88rem;box-shadow:0 8px 24px rgba(0,0,0,.45);
+  animation:toastIn .3s ease-out;
+}
+.toast.red{border-left-color:var(--danger)}
+.toast.gold{border-left-color:var(--gold)}
+@keyframes toastIn{from{transform:translateX(30px);opacity:0}}
+
+/* ============ Goal GIF overlay ============ */
+#gifOverlay{
+  position:fixed;inset:0;z-index:80;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.55);gap:14px;
+}
+#gifOverlay img{max-width:min(74vw,480px);max-height:46vh;border-radius:14px;box-shadow:0 16px 48px rgba(0,0,0,.6)}
+.gif-caption{font-family:var(--display);font-size:clamp(1.3rem,5vw,2.2rem);color:var(--gold);text-shadow:0 2px 14px rgba(0,0,0,.7);text-align:center;padding:0 16px}
+.gif-fallback{font-size:5.4rem;animation:gifBounce .7s ease infinite alternate}
+@keyframes gifBounce{to{transform:translateY(-18px) scale(1.07)}}
+
+/* ============ Red-card flash ============ */
+#redFlash{position:fixed;inset:0;z-index:70;pointer-events:none;opacity:0}
+#redFlash.on{animation:redPulse .95s ease-out 2}
+@keyframes redPulse{
+  0%,100%{opacity:0}
+  35%{opacity:1;box-shadow:inset 0 0 130px 34px rgba(239,68,68,.6)}
+}
+
+/* ============ Admin panel ============ */
+#adminPanel{
+  position:fixed;top:0;right:0;bottom:0;z-index:95;width:min(430px,100vw);
+  background:#07190f;border-left:1px solid var(--line-strong);padding:18px;overflow-y:auto;
+  box-shadow:-12px 0 40px rgba(0,0,0,.5);
+}
+#adminPanel h3{font-family:var(--display);font-size:1rem;color:var(--gold);margin-bottom:12px}
+#adminPanel h4{font-size:.8rem;color:var(--accent);margin:18px 0 8px;letter-spacing:.06em;text-transform:uppercase}
+#adminPanel input,#adminPanel select{
+  background:#0c2417;border:1px solid var(--line-strong);color:var(--txt);border-radius:8px;
+  padding:7px 9px;font-size:.85rem;width:100%;margin-bottom:6px;font-family:inherit;
+}
+#adminPanel .row{display:flex;gap:6px}
+#adminPanel .row>*{flex:1}
+.btn{
+  background:var(--accent);color:#08130c;border:0;border-radius:8px;padding:7px 13px;
+  font-weight:700;font-size:.84rem;
+}
+.btn.ghost{background:none;border:1px solid var(--line-strong);color:var(--muted)}
+.btn.warn{background:var(--danger);color:#fff}
+.adm-list{list-style:none;font-size:.8rem;margin:4px 0}
+.adm-list li{display:flex;justify-content:space-between;gap:8px;padding:4px 0;color:var(--muted);border-bottom:1px dashed rgba(255,255,255,.07)}
+.adm-list button{background:none;border:0;color:var(--danger);font-size:.85rem}
+.adm-elim{display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;font-size:.78rem}
+.adm-elim label{display:flex;align-items:center;gap:6px;padding:2px 0;color:var(--muted)}
+.adm-close{position:absolute;top:12px;right:14px;background:none;border:0;color:var(--muted);font-size:1.4rem}
+
+footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;font-size:.72rem;color:var(--dim);text-align:center}
+
+/* ============ Mobile ============ */
+@media (max-width:640px){
+  .hdr-meta{text-align:left}
+  .cd-clock{margin-left:0;width:100%}
+  .panel{padding:14px 12px}
+  .fx-team{min-width:100px}
+}
+
+/* ============ Reduced motion ============ */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .ticker{overflow-x:auto}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<div id="apiWarn" class="api-warn" hidden>⚠️ Live data unavailable — showing last cached scores.</div>
+
+<header class="hdr">
+  <div class="hdr-top">
+    <div>
+      <span class="host-flags">🇺🇸 🇨🇦 🇲🇽</span>
+      <h1>WORLD CUP 2026 SWEEPSTAKE</h1>
+    </div>
+    <div class="hdr-meta">
+      <div class="day-ind" id="dayIndicator">Tournament day — of —</div>
+      <div class="last-upd" id="lastUpdated">Waiting for first update…</div>
+    </div>
+  </div>
+  <div class="countdown" id="countdown" hidden>
+    <span class="cd-label">NEXT MATCH</span>
+    <span class="cd-match" id="cdMatch"></span>
+    <span class="cd-clock scoreboard" id="cdClock">--:--:--</span>
+  </div>
+</header>
+
+<div class="ticker" id="ticker" aria-label="Latest sweepstake news">
+  <div class="ticker-track" id="tickerTrack"><span class="tick-item">⚽ Loading the latest from the tournament…</span></div>
+</div>
+
+<main>
+
+  <section class="panel spotlight" id="spotlight" hidden>
+    <h2>🔥 Head-to-Head Spotlight</h2>
+    <div class="spot-carousel">
+      <button class="spot-nav" id="spotPrev" aria-label="Previous head-to-head">‹</button>
+      <div class="spot-slide" id="spotSlide"></div>
+      <button class="spot-nav" id="spotNext" aria-label="Next head-to-head">›</button>
+    </div>
+    <div class="spot-dots" id="spotDots"></div>
+  </section>
+
+  <section class="panel">
+    <h2>⚔️ The Grid</h2>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <section class="panel">
+    <h2>🏆 Leaderboard</h2>
+    <div id="leaderboard"></div>
+    <div class="lb-hint">Tap a row to see exactly where the points came from.</div>
+  </section>
+
+  <section class="panel">
+    <h2>📅 Fixtures &amp; Results</h2>
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="today" role="tab">Today</button>
+      <button class="tab" data-tab="upcoming" role="tab">Upcoming</button>
+      <button class="tab" data-tab="results" role="tab">Results</button>
+    </div>
+    <div id="fixturesList"></div>
+  </section>
+
+  <section class="panel">
+    <h2>📊 Stats Corner</h2>
+    <div class="stats-grid" id="statsCorner"></div>
+  </section>
+
+</main>
+
+<footer>
+  All kick-off times shown in UK time (Europe/London). Data via API-Football.
+  <span id="footerAdminHint"></span>
+</footer>
+
+<div id="toasts" aria-live="polite"></div>
+<div id="gifOverlay" hidden></div>
+<div id="redFlash"></div>
+
+<!-- Admin panel (open with ?admin=true) -->
+<div id="adminPanel" hidden>
+  <button class="adm-close" id="admClose" aria-label="Close admin">×</button>
+  <h3>🛠 Admin / Overrides</h3>
+
+  <h4>Manual point adjustment</h4>
+  <select id="admWho"></select>
+  <div class="row">
+    <input type="number" id="admPts" placeholder="Points (e.g. -3 or 5)">
+    <input type="text" id="admReason" placeholder="Reason">
+  </div>
+  <button class="btn" id="admAddPts">Add adjustment</button>
+  <ul class="adm-list" id="admPtsList"></ul>
+
+  <h4>Custom ticker messages</h4>
+  <input type="text" id="admMsg" placeholder="e.g. Dave owes everyone a pint 🍺">
+  <button class="btn" id="admAddMsg">Add message</button>
+  <ul class="adm-list" id="admMsgList"></ul>
+
+  <h4>Mark teams eliminated</h4>
+  <div class="adm-elim" id="admElim"></div>
+
+  <h4>Persistence</h4>
+  <div class="row">
+    <button class="btn ghost" id="admExport">Export JSON</button>
+    <button class="btn ghost" id="admImportBtn">Import JSON</button>
+  </div>
+  <input type="file" id="admImport" accept=".json" hidden>
+  <p style="font-size:.72rem;color:var(--dim);margin:8px 0">
+    Export saves <b>overrides.json</b> — commit it to <code>data/overrides.json</code> in the repo so everyone sees your corrections.
+  </p>
+  <button class="btn warn" id="admClear">Clear all local overrides</button>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   1. SCORING RULES — edit points here, nothing else needed.
+   ============================================================ */
+const SCORING = {
+  goal: 3,              // each goal scored by your team
+  win: 5,               // win (90 mins or extra time)
+  draw: 2,              // draw (incl. knockout games decided on penalties)
+  cleanSheet: 4,        // no goals conceded
+  cleanGame: 3,         // no yellow OR red cards for your team (needs match stats)
+  savePoint: 1,         // per goalkeeper save (needs match stats)
+  shootoutWin: 4,       // winning a penalty shootout (on top of the draw points)
+  redCard: -3,          // each red card against your team
+  reachKnockouts: 5,    // team appears in Round of 32 / Round of 16
+  reachQuarterFinal: 8, // additionally, on reaching the QF
+  reachSemiFinal: 12,   // additionally, on reaching the SF
+  reachFinal: 15,       // additionally, on reaching the Final
+  winTournament: 25     // additionally, for winning the whole thing
+};
+
+/* ============================================================
+   2. APP CONFIG — polling, API, admin.
+   ============================================================ */
+const CONFIG = {
+  leagueId: 1,                 // API-Football: FIFA World Cup
+  season: 2026,
+  timezone: "Europe/London",   // ALL times shown in UK time
+  pollLiveMs: 60 * 1000,       // poll every 60s while a match is live
+  pollIdleMs: 10 * 60 * 1000,  // every 10 min otherwise
+  liveTtlMs: 55 * 1000,        // cache lifetime of the live-scores call
+  scheduleTtlMs: 60 * 60 * 1000,   // full schedule refreshed hourly (also forced on FT)
+  standingsTtlMs: 6 * 60 * 60 * 1000, // group letters, 6-hourly
+  dailyRequestBudget: 95,      // client-side guard for the 100 req/day free tier
+  maxStatsFetchPerCycle: 6,    // max NEW statistics calls per refresh cycle
+  adminPass: "corner-flag",    // ?admin=true passphrase — change me!
+  tournamentStart: "2026-06-11",
+  tournamentEnd: "2026-07-19"
+};
+
+const LIVE_STATUSES = new Set(["1H","HT","2H","ET","BT","P","LIVE","INT","SUSP"]);
+const FINISHED_STATUSES = new Set(["FT","AET","PEN"]);
+
+/* Celebration GIFs — swap for local files (e.g. "assets/gifs/goal1.gif") if any
+   of these Giphy links die. A broken image falls back to a bouncing ⚽ emoji. */
+const GOAL_GIFS = [
+  "https://media.giphy.com/media/3oz8xRF0v9WMAUVLNK/giphy.gif",
+  "https://media.giphy.com/media/l0HU7JI1nzVRLkKDS/giphy.gif",
+  "https://media.giphy.com/media/wAxlCmeX1ri1y/giphy.gif",
+  "https://media.giphy.com/media/3o6ZsYm5P38NvFPMis/giphy.gif",
+  "https://media.giphy.com/media/26tOZ42Mg6pbTUPHW/giphy.gif"
+];
+
+/* ============================================================
+   3. UTILITIES
+   ============================================================ */
+const $ = (s) => document.querySelector(s);
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function esc(s){
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+/* Accent/case/punctuation-insensitive name key, so "Côte d'Ivoire" === "cote divoire". */
+function norm(s){
+  return String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"")
+    .toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+}
+const UK = { timeZone: CONFIG.timezone };
+function fmtTime(d){ return new Intl.DateTimeFormat("en-GB",{...UK,hour:"2-digit",minute:"2-digit"}).format(d); }
+function fmtDay(d){ return new Intl.DateTimeFormat("en-GB",{...UK,weekday:"short",day:"numeric",month:"short"}).format(d); }
+function fmtDayTime(d){ return fmtDay(d) + " " + fmtTime(d); }
+function ukDateKey(d){ return new Intl.DateTimeFormat("en-CA",{...UK,year:"numeric",month:"2-digit",day:"2-digit"}).format(d); }
+
+/* localStorage wrapper (everything namespaced under wcss_). */
+const LS = {
+  get(k, fb){ try { const v = localStorage.getItem("wcss_"+k); return v ? JSON.parse(v) : fb; } catch(e){ return fb; } },
+  set(k, v){ try { localStorage.setItem("wcss_"+k, JSON.stringify(v)); } catch(e){ /* storage full — fine, we degrade */ } },
+  del(k){ try { localStorage.removeItem("wcss_"+k); } catch(e){} }
+};
+
+/* ============================================================
+   4. STATE
+   ============================================================ */
+const state = {
+  data: null,              // data/sweepstake.json
+  teams: [],               // flat team list, each with .owner
+  teamByKey: new Map(),    // norm(name/alias) -> team
+  teamIdMap: LS.get("teamIds", {}),   // API team id -> team name (learned at runtime)
+  fixtures: new Map(),     // fixture id -> API fixture object (live ones carry .events)
+  groups: {},              // norm(team name) -> group letter
+  overrides: LS.get("overrides", { pointAdjustments: [], tickerMessages: [], eliminated: [] }),
+  repoOverrides: null,     // optional data/overrides.json committed to the repo
+  degraded: false,
+  lastUpdated: null,
+  model: null,             // computed scores model
+  prevRects: new Map(),    // for FLIP animations
+  prevTotals: new Map(),   // for count-up animations
+  fxTab: "today",
+  spotIndex: 0,
+  spotMatches: [],
+  pollTimer: null,
+  tickerHash: ""
+};
+
+/* ============================================================
+   5. API LAYER — caching, budget guard, graceful degradation
+   ============================================================ */
+let networkCallsThisCycle = 0;
+
+function budget(){
+  const today = ukDateKey(new Date());
+  let b = LS.get("budget", null);
+  if (!b || b.day !== today) b = { day: today, used: 0 };
+  return b;
+}
+
+/* api(): returns cached JSON if fresh; otherwise fetches via the Netlify proxy.
+   On any failure it returns stale cache (if any) and flips the warning banner. */
+async function api(endpoint, params, ttlMs){
+  const key = "api:" + endpoint + ":" + new URLSearchParams(params).toString();
+  const cached = LS.get(key, null);
+  const now = Date.now();
+  if (cached && (ttlMs === Infinity || now - cached.t < ttlMs)) return cached.v;
+
+  const b = budget();
+  if (b.used >= CONFIG.dailyRequestBudget){
+    state.degraded = true;
+    return cached ? cached.v : null;
+  }
+  try {
+    const qs = new URLSearchParams(Object.assign({ endpoint }, params));
+    const res = await fetch("/.netlify/functions/scores?" + qs.toString());
+    b.used++; LS.set("budget", b); networkCallsThisCycle++;
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const json = await res.json();
+    if (json.error) throw new Error(json.error);
+    if (json.errors && !Array.isArray(json.errors) && Object.keys(json.errors).length) throw new Error(JSON.stringify(json.errors));
+    LS.set(key, { t: now, v: json });
+    return json;
+  } catch (e) {
+    console.warn("API degraded:", endpoint, e.message);
+    state.degraded = true;
+    return cached ? cached.v : null;
+  }
+}
+
+/* ============================================================
+   6. SWEEPSTAKE DATA + TEAM MATCHING
+   ============================================================ */
+async function loadSweepstake(){
+  const res = await fetch("data/sweepstake.json");
+  state.data = await res.json();
+  for (const p of state.data.participants){
+    for (const t of p.teams){
+      t.owner = p;
+      state.teams.push(t);
+      state.teamByKey.set(norm(t.name), t);
+      for (const a of (t.aliases || [])) state.teamByKey.set(norm(a), t);
+    }
+  }
+  // Optional committed overrides (exported from the admin panel).
+  try {
+    const r = await fetch("data/overrides.json");
+    if (r.ok) state.repoOverrides = await r.json();
+  } catch(e){ /* file simply doesn't exist yet */ }
+}
+
+/* Map an API-Football team object to one of our sweepstake teams (or null). */
+function matchTeam(apiTeam){
+  if (!apiTeam) return null;
+  const learned = state.teamIdMap[apiTeam.id];
+  if (learned){ const t = state.teamByKey.get(norm(learned)); if (t) return t; }
+  const t = state.teamByKey.get(norm(apiTeam.name));
+  if (t && apiTeam.id){ state.teamIdMap[apiTeam.id] = t.name; LS.set("teamIds", state.teamIdMap); }
+  return t || null;
+}
+
+/* Merge repo overrides + local overrides (deduped) into one effective set. */
+function effectiveOverrides(){
+  const out = { pointAdjustments: [], tickerMessages: [], eliminated: [] };
+  const seen = new Set();
+  for (const src of [state.repoOverrides, state.overrides]){
+    if (!src) continue;
+    for (const a of (src.pointAdjustments || [])){
+      const sig = a.participant + "|" + a.points + "|" + (a.reason || "");
+      if (!seen.has(sig)){ seen.add(sig); out.pointAdjustments.push(a); }
+    }
+    for (const m of (src.tickerMessages || [])) if (!out.tickerMessages.includes(m)) out.tickerMessages.push(m);
+    for (const e of (src.eliminated || [])) if (!out.eliminated.includes(e)) out.eliminated.push(e);
+  }
+  return out;
+}
+
+/* ============================================================
+   7. FIXTURE HELPERS
+   ============================================================ */
+function fxStatus(fx){ return fx.fixture.status.short; }
+function isLiveFx(fx){ return LIVE_STATUSES.has(fxStatus(fx)); }
+function isDoneFx(fx){ return FINISHED_STATUSES.has(fxStatus(fx)); }
+function kickoff(fx){ return new Date(fx.fixture.date); }
+function allFixtures(){ return Array.from(state.fixtures.values()); }
+
+/* Which knockout stage is a round name? */
+function stageOf(round){
+  const r = String(round || "").toLowerCase();
+  if (r.includes("quarter")) return "QF";
+  if (r.includes("semi")) return "SF";
+  if (r.includes("3rd") || r.includes("third")) return "SF3";   // 3rd-place game: SF stage, no extra bonus
+  if (r.includes("final")) return "F";
+  if (r.includes("round of")) return "KO";
+  return null; // group stage
+}
+
+/* Is any owned team plausibly playing right now? (controls live polling) */
+function inLiveWindow(){
+  const now = Date.now();
+  return allFixtures().some((fx) => {
+    if (isLiveFx(fx)) return true;
+    const ko = kickoff(fx).getTime();
+    return fxStatus(fx) === "NS" && ko - 2*60*1000 <= now && now <= ko + 3.5*60*60*1000;
+  });
+}
+
+/* Per-team match statistics (cards/saves) for a finished fixture, from cache. */
+function statsFor(fxId, teamApiId){
+  const cached = LS.get("api:fixtures/statistics:" + new URLSearchParams({fixture: fxId}).toString(), null);
+  const resp = cached && cached.v && cached.v.response;
+  if (!resp || !resp.length) return null;
+  const side = resp.find((s) => s.team && s.team.id === teamApiId);
+  if (!side) return null;
+  const get = (type) => {
+    const row = (side.statistics || []).find((x) => x.type === type);
+    return row && row.value != null ? Number(row.value) || 0 : 0;
+  };
+  return { yellow: get("Yellow Cards"), red: get("Red Cards"), saves: get("Goalkeeper Saves") };
+}
+
+/* ============================================================
+   8. SCORING ENGINE
+   ============================================================ */
+function computeModel(){
+  const ov = effectiveOverrides();
+  const eliminatedSet = new Set(ov.eliminated.map(norm));
+
+  // Per-team scoreboard skeleton
+  const T = new Map(); // team.name -> stats
+  for (const t of state.teams){
+    T.set(t.name, {
+      team: t, points: 0, breakdown: [], played: 0, gf: 0, ga: 0,
+      cards: 0, reds: 0, saves: 0, liveFx: null, nextFx: null, lastFx: null,
+      eliminated: eliminatedSet.has(norm(t.name)), stage: "GROUP", champion: false
+    });
+  }
+  const add = (ts, pts, label) => { if (pts) { ts.points += pts; ts.breakdown.push({ label, pts }); } };
+
+  const fixtures = allFixtures().sort((a, b) => kickoff(a) - kickoff(b));
+
+  for (const fx of fixtures){
+    const pens = (fx.score && fx.score.penalty) || {};
+    const sides = [
+      { team: matchTeam(fx.teams.home), api: fx.teams.home, gf: fx.goals.home, ga: fx.goals.away, pen: pens.home, openalty: pens.away },
+      { team: matchTeam(fx.teams.away), api: fx.teams.away, gf: fx.goals.away, ga: fx.goals.home, pen: pens.away, openalty: pens.home }
+    ];
+    const st = fxStatus(fx);
+    const stage = stageOf(fx.league.round);
+
+    for (const s of sides){
+      if (!s.team) continue;
+      const ts = T.get(s.team.name);
+      const oppName = s === sides[0] ? (sides[1].team ? sides[1].team.name : fx.teams.away.name) : (sides[0].team ? sides[0].team.name : fx.teams.home.name);
+
+      if (isLiveFx(fx)){
+        ts.liveFx = fx;
+        if (s.gf > 0) add(ts, s.gf * SCORING.goal, `⚽ ${s.gf} goal${s.gf>1?"s":""} vs ${oppName} (live)`);
+        ts.gf += s.gf || 0; ts.ga += s.ga || 0;
+      } else if (FINISHED_STATUSES.has(st)){
+        ts.played++; ts.lastFx = fx;
+        ts.gf += s.gf || 0; ts.ga += s.ga || 0;
+        if (s.gf > 0) add(ts, s.gf * SCORING.goal, `⚽ ${s.gf} goal${s.gf>1?"s":""} vs ${oppName}`);
+
+        if (st === "PEN"){
+          // Shootout: the match itself counts as a draw, winner gets the shootout bonus.
+          add(ts, SCORING.draw, `🤝 Draw vs ${oppName} (pens)`);
+          if ((s.pen || 0) > (s.openalty || 0)) add(ts, SCORING.shootoutWin, `🎯 Shootout win vs ${oppName}`);
+        } else if (s.gf > s.ga){
+          add(ts, SCORING.win, `✅ Win vs ${oppName}`);
+        } else if (s.gf === s.ga){
+          add(ts, SCORING.draw, `🤝 Draw vs ${oppName}`);
+        }
+        if ((s.ga || 0) === 0) add(ts, SCORING.cleanSheet, `🧱 Clean sheet vs ${oppName}`);
+
+        const ms = statsFor(fx.fixture.id, s.api.id);
+        if (ms){
+          if (ms.yellow === 0 && ms.red === 0) add(ts, SCORING.cleanGame, `😇 Clean game vs ${oppName}`);
+          if (ms.saves > 0) add(ts, ms.saves * SCORING.savePoint, `🧤 ${ms.saves} save${ms.saves>1?"s":""} vs ${oppName}`);
+          if (ms.red > 0) add(ts, ms.red * SCORING.redCard, `🟥 ${ms.red} red card${ms.red>1?"s":""} vs ${oppName}`);
+          ts.cards += ms.yellow + ms.red; ts.reds += ms.red;
+          ts.saves += ms.saves;
+        }
+        // Knockout loser is out (penalty shootouts: the side with fewer pens).
+        if (stage){
+          const lostInNormalTime = s.gf < s.ga;
+          const lostShootout = st === "PEN" && (s.pen || 0) < (s.openalty || 0);
+          if (lostInNormalTime || lostShootout) ts.eliminated = true;
+        }
+      } else { // upcoming
+        if (!ts.nextFx || kickoff(fx) < kickoff(ts.nextFx)) ts.nextFx = fx;
+      }
+
+      // Track deepest stage reached (by having a fixture scheduled there).
+      if (stage){
+        const order = { KO: 1, QF: 2, SF: 3, SF3: 3, F: 4 };
+        const cur = { GROUP: 0, KO: 1, QF: 2, SF: 3, F: 4 }[ts.stage] || 0;
+        const nxt = order[stage] || 0;
+        if (nxt > cur) ts.stage = stage === "SF3" ? "SF" : stage;
+        // Champion: won the final.
+        if (stage === "F" && FINISHED_STATUSES.has(st)){
+          const wonFinal = st === "PEN" ? (s.pen || 0) > (s.openalty || 0) : s.gf > s.ga;
+          if (wonFinal) ts.champion = true;
+        }
+      }
+    }
+  }
+
+  // Stage bonuses (cumulative, as configured in SCORING).
+  for (const ts of T.values()){
+    const reached = { GROUP: 0, KO: 1, QF: 2, SF: 3, F: 4 }[ts.stage] || 0;
+    if (reached >= 1) add(ts, SCORING.reachKnockouts, "🚪 Reached the knockouts");
+    if (reached >= 2) add(ts, SCORING.reachQuarterFinal, "🎯 Reached the quarter-finals");
+    if (reached >= 3) add(ts, SCORING.reachSemiFinal, "🔥 Reached the semi-finals");
+    if (reached >= 4) add(ts, SCORING.reachFinal, "🏟 Reached the final");
+    if (ts.champion){ add(ts, SCORING.winTournament, "🏆 WORLD CHAMPIONS"); }
+    if (ts.champion) ts.eliminated = false;
+  }
+
+  // Roll up per participant.
+  const participants = state.data.participants.map((p) => {
+    const teams = p.teams.map((t) => T.get(t.name));
+    let total = teams.reduce((sum, ts) => sum + ts.points, 0);
+    const adjustments = ov.pointAdjustments.filter((a) => a.participant === p.name);
+    for (const a of adjustments) total += Number(a.points) || 0;
+    return {
+      p, teams, adjustments, total,
+      goals: teams.reduce((s, t) => s + t.gf, 0),
+      cards: teams.reduce((s, t) => s + t.cards, 0),
+      saves: teams.reduce((s, t) => s + t.saves, 0),
+      liveCount: teams.filter((t) => t.liveFx).length,
+      aliveCount: teams.filter((t) => !t.eliminated).length
+    };
+  });
+  participants.sort((a, b) => b.total - a.total || b.goals - a.goals || a.p.name.localeCompare(b.p.name));
+
+  state.model = { teams: T, participants, overrides: ov };
+}
+
+/* ============================================================
+   9. RENDERING
+   ============================================================ */
+function ownerChip(p){
+  return `<span class="owner-chip" style="background:${esc(p.color)}">${esc(p.name)}</span>`;
+}
+function groupOf(t){
+  return t.group || state.groups[norm(t.name)] || "–";
+}
+function initials(name){
+  return name.trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+}
+
+/* ---------- Header: day indicator + countdown ---------- */
+function renderHeader(){
+  const start = new Date(CONFIG.tournamentStart + "T00:00:00Z");
+  const end = new Date(CONFIG.tournamentEnd + "T00:00:00Z");
+  const totalDays = Math.round((end - start) / 864e5) + 1;
+  const day = Math.floor((Date.now() - start) / 864e5) + 1;
+  $("#dayIndicator").textContent =
+    day < 1 ? `Kicks off ${fmtDay(start)}` :
+    day > totalDays ? "Tournament finished 🏆" :
+    `Tournament day ${day} of ${totalDays}`;
+
+  if (state.lastUpdated){
+    $("#lastUpdated").textContent = "Last updated " + fmtTime(state.lastUpdated) +
+      (state.degraded ? " (cached)" : "");
+  }
+  $("#apiWarn").hidden = !state.degraded;
+
+  // Countdown target: next not-started fixture involving an owned team.
+  const next = allFixtures()
+    .filter((fx) => fxStatus(fx) === "NS" && (matchTeam(fx.teams.home) || matchTeam(fx.teams.away)) && kickoff(fx) > new Date())
+    .sort((a, b) => kickoff(a) - kickoff(b))[0];
+  countdownTarget = next || null;
+  if (next){
+    const h = matchTeam(next.teams.home), a = matchTeam(next.teams.away);
+    $("#countdown").hidden = false;
+    $("#cdMatch").innerHTML =
+      `${h ? esc(h.flag) + " " : ""}${esc(next.teams.home.name)}${h ? " " + ownerChip(h.owner) : ""}` +
+      ` <span style="color:var(--muted)">v</span> ` +
+      `${a ? esc(a.flag) + " " : ""}${esc(next.teams.away.name)}${a ? " " + ownerChip(a.owner) : ""}` +
+      ` <span style="color:var(--muted)">· ${esc(fmtDayTime(kickoff(next)))}</span>`;
+  } else {
+    $("#countdown").hidden = true;
+  }
+}
+let countdownTarget = null;
+setInterval(() => {
+  if (!countdownTarget) return;
+  let ms = kickoff(countdownTarget) - Date.now();
+  if (ms <= 0){ $("#cdClock").textContent = "KICK-OFF!"; return; }
+  const d = Math.floor(ms / 864e5); ms -= d * 864e5;
+  const h = Math.floor(ms / 36e5);  ms -= h * 36e5;
+  const m = Math.floor(ms / 6e4);   ms -= m * 6e4;
+  const s = Math.floor(ms / 1e3);
+  const pad = (n) => String(n).padStart(2, "0");
+  $("#cdClock").textContent = (d ? d + "d " : "") + pad(h) + ":" + pad(m) + ":" + pad(s);
+}, 1000);
+
+/* ---------- News ticker ---------- */
+function tickerItems(){
+  const items = [];
+  for (const m of state.model.overrides.tickerMessages) items.push("📢 <b>" + esc(m) + "</b>");
+
+  const fixtures = allFixtures();
+  // Live events (goals + cards) — the live feed embeds an events array.
+  for (const fx of fixtures.filter(isLiveFx)){
+    const score = ` — ${esc(fx.teams.home.name)} ${fx.goals.home}-${fx.goals.away} ${esc(fx.teams.away.name)}`;
+    for (const ev of (fx.events || []).slice(-12)){
+      const t = matchTeam(ev.team);
+      const who = t ? ` — <b>${esc(t.owner.name)}'s team!</b>` : "";
+      const min = ev.time && ev.time.elapsed != null ? ev.time.elapsed + "'" : "";
+      if (ev.type === "Goal" && ev.detail !== "Missed Penalty")
+        items.push(`⚽ GOAL! ${esc(ev.player && ev.player.name || "")} ${min}${score}${who}`);
+      else if (ev.type === "Card")
+        items.push(`${ev.detail === "Red Card" ? "🟥" : "🟨"} ${esc(ev.player && ev.player.name || "")} ${min} (${esc(ev.team.name)})${t ? " — " + esc(t.owner.name) : ""}`);
+    }
+  }
+  // Recent full-time results (last 36h).
+  for (const fx of fixtures.filter((fx) => isDoneFx(fx) && Date.now() - kickoff(fx) < 36 * 36e5).sort((a,b) => kickoff(b) - kickoff(a)).slice(0, 8)){
+    const h = matchTeam(fx.teams.home), a = matchTeam(fx.teams.away);
+    items.push(`🏁 FT: ${esc(fx.teams.home.name)} ${fx.goals.home}-${fx.goals.away} ${esc(fx.teams.away.name)}` +
+      (h && a ? ` — <b>${esc(h.owner.name)}</b> v <b>${esc(a.owner.name)}</b>` : ""));
+  }
+  // Upcoming head-to-heads.
+  for (const fx of fixtures.filter((fx) => fxStatus(fx) === "NS" && kickoff(fx) > new Date()).sort((a,b) => kickoff(a) - kickoff(b)).slice(0, 5)){
+    const h = matchTeam(fx.teams.home), a = matchTeam(fx.teams.away);
+    if (h && a && h.owner !== a.owner)
+      items.push(`🔥 COMING UP: <b>${esc(h.owner.name)}</b>'s ${esc(h.name)} v <b>${esc(a.owner.name)}</b>'s ${esc(a.name)} — ${esc(fmtDayTime(kickoff(fx)))}`);
+  }
+  if (!items.length) items.push("⚽ Waiting for tournament data… the pints are on whoever finishes bottom.");
+  return items;
+}
+
+function renderTicker(){
+  const items = tickerItems();
+  const hash = items.join("|");
+  if (hash === state.tickerHash) return;      // don't restart the animation needlessly
+  state.tickerHash = hash;
+  const half = items.map((i) => `<span class="tick-item">${i}</span>`).join("");
+  const track = $("#tickerTrack");
+  track.innerHTML = half + half;              // duplicate for a seamless loop
+  track.style.animationDuration = Math.max(30, items.length * 7) + "s";
+}
+
+/* ---------- Head-to-head spotlight ---------- */
+function renderSpotlight(){
+  const matches = allFixtures().filter((fx) => {
+    const h = matchTeam(fx.teams.home), a = matchTeam(fx.teams.away);
+    return h && a && h.owner !== a.owner && !isDoneFx(fx) && (isLiveFx(fx) || kickoff(fx) > new Date());
+  }).sort((a, b) => (isLiveFx(b) - isLiveFx(a)) || (kickoff(a) - kickoff(b))).slice(0, 6);
+
+  state.spotMatches = matches;
+  $("#spotlight").hidden = !matches.length;
+  if (!matches.length) return;
+  if (state.spotIndex >= matches.length) state.spotIndex = 0;
+  const fx = matches[state.spotIndex];
+  const h = matchTeam(fx.teams.home), a = matchTeam(fx.teams.away);
+  const live = isLiveFx(fx);
+
+  let detail = "";
+  if (live){
+    const goals = (fx.events || []).filter((e) => e.type === "Goal" && e.detail !== "Missed Penalty")
+      .map((e) => `⚽ ${esc(e.player && e.player.name || "?")} ${e.time && e.time.elapsed || ""}'`);
+    const reds = (fx.events || []).filter((e) => e.type === "Card" && e.detail === "Red Card")
+      .map((e) => `🟥 ${esc(e.player && e.player.name || "?")}`);
+    detail = goals.concat(reds).join(" · ");
+  }
+  $("#spotSlide").innerHTML = `
+    <div class="spot-tag">${live ? '<span class="live-dot">🔴</span> LIVE NOW' : "🔥 DERBY DAY"}</div>
+    <div class="spot-teams">
+      <div class="spot-side">
+        <span class="spot-flag">${esc(h.flag)}</span>
+        <div class="spot-team">${esc(fx.teams.home.name)}</div>
+        ${ownerChip(h.owner)}
+      </div>
+      <div class="spot-score scoreboard">${live || isDoneFx(fx) ? `${fx.goals.home ?? 0} – ${fx.goals.away ?? 0}` : "v"}</div>
+      <div class="spot-side">
+        <span class="spot-flag">${esc(a.flag)}</span>
+        <div class="spot-team">${esc(fx.teams.away.name)}</div>
+        ${ownerChip(a.owner)}
+      </div>
+    </div>
+    <div class="spot-when">${live ? esc(fx.fixture.status.elapsed != null ? fx.fixture.status.elapsed + "'" : "In play") : esc(fmtDayTime(kickoff(fx))) + " · " + esc(fx.league.round || "")}</div>
+    ${detail ? `<div class="spot-detail">${detail}</div>` : ""}`;
+  $("#spotDots").innerHTML = matches.map((_, i) =>
+    `<span class="spot-dot${i === state.spotIndex ? " on" : ""}" data-i="${i}"></span>`).join("");
+}
+function spotStep(d){
+  if (!state.spotMatches.length) return;
+  state.spotIndex = (state.spotIndex + d + state.spotMatches.length) % state.spotMatches.length;
+  renderSpotlight();
+}
+$("#spotPrev").addEventListener("click", () => spotStep(-1));
+$("#spotNext").addEventListener("click", () => spotStep(1));
+$("#spotDots").addEventListener("click", (e) => {
+  const d = e.target.closest(".spot-dot");
+  if (d){ state.spotIndex = Number(d.dataset.i); renderSpotlight(); }
+});
+if (!reducedMotion) setInterval(() => { if (state.spotMatches.length > 1) spotStep(1); }, 8000);
+
+/* ---------- Team row status text ---------- */
+function teamStatus(ts){
+  if (ts.liveFx){
+    const fx = ts.liveFx;
+    return `<span class="live-dot">🔴</span> ${fx.goals.home ?? 0}-${fx.goals.away ?? 0} (${esc(fx.fixture.status.elapsed != null ? fx.fixture.status.elapsed + "'" : fxStatus(fx))})`;
+  }
+  if (ts.nextFx) return esc(fmtDayTime(kickoff(ts.nextFx)));
+  if (ts.lastFx){
+    const fx = ts.lastFx;
+    const home = matchTeam(fx.teams.home) === ts.team;
+    const gf = home ? fx.goals.home : fx.goals.away, ga = home ? fx.goals.away : fx.goals.home;
+    return `FT ${gf}-${ga} v ${esc(home ? fx.teams.away.name : fx.teams.home.name)}`;
+  }
+  return "–";
+}
+
+/* ---------- The Grid (with FLIP reorder animation) ---------- */
+function renderGrid(){
+  const grid = $("#grid");
+  // FIRST: remember where each card currently is.
+  const oldRects = new Map();
+  for (const el of grid.children) oldRects.set(el.dataset.name, el.getBoundingClientRect());
+
+  grid.innerHTML = state.model.participants.map((row, i) => {
+    const p = row.p;
+    const live = row.liveCount > 0;
+    return `
+    <div class="card${live ? " live" : ""}" data-name="${esc(p.name)}">
+      <div class="card-head">
+        <span class="avatar" style="background:${esc(p.color)}">${esc(initials(p.name))}</span>
+        <span class="card-name">${esc(p.name)}<div class="card-rank">#${i + 1} · ${row.aliveCount}/6 teams alive</div></span>
+        <span class="card-pts" data-countup="${row.total}">${row.total}</span>
+      </div>
+      ${row.teams.map((ts) => `
+        <div class="team-row${ts.eliminated ? " out" : ""}">
+          <span class="t-flag">${esc(ts.team.flag)}</span>
+          <span class="t-name">${esc(ts.team.name)}</span>
+          <span class="t-grp">${esc(groupOf(ts.team))}</span>
+          <span class="t-status">${teamStatus(ts)}</span>
+          <span class="t-pts">${ts.points}</span>
+        </div>`).join("")}
+    </div>`;
+  }).join("");
+
+  // LAST + INVERT + PLAY.
+  if (!reducedMotion){
+    for (const el of grid.children){
+      const old = oldRects.get(el.dataset.name);
+      if (!old) continue;
+      const now = el.getBoundingClientRect();
+      const dx = old.left - now.left, dy = old.top - now.top;
+      if (dx || dy){
+        el.animate(
+          [{ transform: `translate(${dx}px,${dy}px)` }, { transform: "translate(0,0)" }],
+          { duration: 550, easing: "cubic-bezier(.2,.8,.2,1)" }
+        );
+      }
+    }
+    // Count-up the totals.
+    for (const el of grid.querySelectorAll("[data-countup]")){
+      const name = el.closest(".card").dataset.name;
+      const to = Number(el.dataset.countup);
+      const from = state.prevTotals.get(name) ?? to;
+      if (from !== to) animateCount(el, from, to);
+      state.prevTotals.set(name, to);
+    }
+  }
+}
+function animateCount(el, from, to){
+  const t0 = performance.now(), dur = 700;
+  (function tick(t){
+    const k = Math.min(1, (t - t0) / dur);
+    el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3)));
+    if (k < 1) requestAnimationFrame(tick);
+  })(t0);
+}
+
+/* ---------- Leaderboard ---------- */
+function renderLeaderboard(){
+  const medals = ["gold", "silver", "bronze"];
+  $("#leaderboard").innerHTML = `
+  <table class="lb-table">
+    <thead><tr><th>#</th><th>Owner</th><th style="text-align:right">⚽</th><th style="text-align:right">🟨🟥</th><th style="text-align:right">🧤</th><th style="text-align:right">PTS</th></tr></thead>
+    <tbody>
+      ${state.model.participants.map((row, i) => `
+      <tr class="lb-row ${medals[i] || ""}" data-name="${esc(row.p.name)}">
+        <td class="lb-rank">${i < 3 ? ["🥇","🥈","🥉"][i] : i + 1}</td>
+        <td>${ownerChip(row.p)}</td>
+        <td class="lb-num">${row.goals}</td>
+        <td class="lb-num">${row.cards}</td>
+        <td class="lb-num">${row.saves}</td>
+        <td class="lb-pts">${row.total}</td>
+      </tr>
+      <tr class="lb-break" data-for="${esc(row.p.name)}" hidden><td colspan="6">
+        ${row.teams.map((ts) => `
+          <div class="bk-team">${esc(ts.team.flag)} ${esc(ts.team.name)} — ${ts.points} pts${ts.eliminated ? " (eliminated)" : ""}</div>
+          <ul>${ts.breakdown.length
+            ? ts.breakdown.map((b) => `<li><b>${b.label}</b><span class="bk-pts">${b.pts > 0 ? "+" : ""}${b.pts}</span></li>`).join("")
+            : "<li>No points yet</li>"}</ul>`).join("")}
+        ${row.adjustments.length ? `<div class="bk-team">🛠 Manual adjustments</div>
+          <ul>${row.adjustments.map((a) => `<li><b>${esc(a.reason || "Adjustment")}</b><span class="bk-pts">${a.points > 0 ? "+" : ""}${esc(String(a.points))}</span></li>`).join("")}</ul>` : ""}
+      </td></tr>`).join("")}
+    </tbody>
+  </table>`;
+}
+$("#leaderboard").addEventListener("click", (e) => {
+  const row = e.target.closest(".lb-row");
+  if (!row) return;
+  const br = $("#leaderboard").querySelector(`.lb-break[data-for="${CSS.escape(row.dataset.name)}"]`);
+  if (br) br.hidden = !br.hidden;
+});
+
+/* ---------- Fixtures & Results tabs ---------- */
+function fxRow(fx){
+  const h = matchTeam(fx.teams.home), a = matchTeam(fx.teams.away);
+  const live = isLiveFx(fx), done = isDoneFx(fx);
+  const fire = h && a && h.owner !== a.owner;
+  const mid = live || done
+    ? `<span class="fx-score${live ? " live" : ""} scoreboard">${fx.goals.home ?? 0}–${fx.goals.away ?? 0}</span>
+       <span class="fx-st">${live ? esc((fx.fixture.status.elapsed ?? "") + "' LIVE") : esc(fxStatus(fx)) + (fxStatus(fx) === "PEN" && fx.score && fx.score.penalty ? ` ${fx.score.penalty.home}-${fx.score.penalty.away}p` : "")}</span>`
+    : `<span class="fx-time">${esc(fmtTime(kickoff(fx)))}</span><span class="fx-st">${esc(fmtDay(kickoff(fx)))}</span>`;
+  return `
+  <div class="fx-row">
+    <div class="fx-team"><span>${h ? esc(h.flag) : "🏳️"}</span><span class="nm">${esc(fx.teams.home.name)}</span>${h ? ownerChip(h.owner) : ""}</div>
+    <div class="fx-mid">${mid}</div>
+    <div class="fx-team away">${a ? ownerChip(a.owner) : ""}<span class="nm">${esc(fx.teams.away.name)}</span><span>${a ? esc(a.flag) : "🏳️"}</span></div>
+    <span class="fx-fire">${fire ? "🔥" : ""}</span>
+  </div>`;
+}
+
+function renderFixtures(){
+  const all = allFixtures().sort((a, b) => kickoff(a) - kickoff(b));
+  const today = ukDateKey(new Date());
+  let list = [], empty = "";
+  if (state.fxTab === "today"){
+    list = all.filter((fx) => ukDateKey(kickoff(fx)) === today);
+    empty = "No matches today — rest day. Hydrate. 🍺";
+  } else if (state.fxTab === "upcoming"){
+    list = all.filter((fx) => fxStatus(fx) === "NS" && kickoff(fx) > new Date()).slice(0, 18);
+    empty = "No upcoming fixtures found yet.";
+  } else {
+    list = all.filter(isDoneFx).reverse().slice(0, 24);
+    empty = "No results yet — the carnage is still to come.";
+  }
+  if (!list.length){
+    $("#fixturesList").innerHTML = `<div class="fx-empty">${empty}</div>`;
+    return;
+  }
+  let html = "", lastDay = "";
+  for (const fx of list){
+    const day = fmtDay(kickoff(fx));
+    if (day !== lastDay){ html += `<div class="fx-day">${esc(day)}</div>`; lastDay = day; }
+    html += fxRow(fx);
+  }
+  $("#fixturesList").innerHTML = html;
+}
+document.querySelector(".tabs").addEventListener("click", (e) => {
+  const tab = e.target.closest(".tab");
+  if (!tab) return;
+  state.fxTab = tab.dataset.tab;
+  for (const t of document.querySelectorAll(".tab")) t.classList.toggle("active", t === tab);
+  renderFixtures();
+});
+
+/* ---------- Stats corner ---------- */
+function renderStats(){
+  const P = state.model.participants;
+  if (!P.length) return;
+  const by = (key) => P.slice().sort((a, b) => b[key] - a[key])[0];
+  const goals = by("goals"), cards = by("cards"), saves = by("saves");
+  const spoon = P[P.length - 1];
+  const card = (emoji, title, row, val) => `
+    <div class="stat-card">
+      <div class="stat-emoji">${emoji}</div>
+      <div class="stat-title">${title}</div>
+      <div class="stat-who">${ownerChip(row.p)}</div>
+      <div class="stat-val">${val}</div>
+    </div>`;
+  $("#statsCorner").innerHTML =
+    card("👟", "GOLDEN BOOT GAFFER", goals, goals.goals + " goals scored") +
+    card("🟨", "DIRTIEST OWNER", cards, cards.cards + " cards collected") +
+    card("🧤", "WALL OF THE TOURNAMENT", saves, saves.saves + " saves") +
+    card("🥄", "WOODEN SPOON WATCH", spoon, spoon.total + " pts — buy the pints");
+}
+
+function renderAll(){
+  renderHeader();
+  renderTicker();
+  renderSpotlight();
+  renderGrid();
+  renderLeaderboard();
+  renderFixtures();
+  renderStats();
+}
+
+/* ============================================================
+   10. CELEBRATIONS — confetti, GIFs, toasts, red flashes
+   ============================================================ */
+function showToast(html, cls){
+  const box = $("#toasts");
+  const el = document.createElement("div");
+  el.className = "toast" + (cls ? " " + cls : "");
+  el.innerHTML = html;
+  box.appendChild(el);
+  while (box.children.length > 4) box.firstChild.remove();
+  setTimeout(() => el.remove(), 6000);
+}
+
+function fireConfetti(){
+  if (reducedMotion || typeof confetti !== "function") return;
+  confetti({ particleCount: 160, spread: 75, origin: { y: 0.7 } });
+  setTimeout(() => confetti({ particleCount: 90, angle: 60, spread: 60, origin: { x: 0 } }), 250);
+  setTimeout(() => confetti({ particleCount: 90, angle: 120, spread: 60, origin: { x: 1 } }), 400);
+}
+
+function showGoalOverlay(caption){
+  const ov = $("#gifOverlay");
+  const gif = GOAL_GIFS[Math.floor(Math.random() * GOAL_GIFS.length)];
+  ov.innerHTML = `<img src="${esc(gif)}" alt="celebration"
+      onerror="this.outerHTML='<div class=&quot;gif-fallback&quot;>⚽🎉</div>'">
+    <div class="gif-caption">${caption}</div>`;
+  ov.hidden = false;
+  clearTimeout(showGoalOverlay._t);
+  showGoalOverlay._t = setTimeout(() => { ov.hidden = true; }, 4000);
+}
+$("#gifOverlay").addEventListener("click", () => { $("#gifOverlay").hidden = true; });
+
+function redCardFlash(){
+  if (reducedMotion) return;
+  const el = $("#redFlash");
+  el.classList.remove("on"); void el.offsetWidth; // restart animation
+  el.classList.add("on");
+}
+
+function trophyShake(ownerName){
+  const card = document.querySelector(`.card[data-name="${CSS.escape(ownerName)}"]`);
+  if (card){ card.classList.add("trophy-shake"); setTimeout(() => card.classList.remove("trophy-shake"), 1600); }
+}
+
+/* Compare a snapshot of every fixture against the previous one and celebrate
+   the differences (goals / reds / full-time wins for owned teams). */
+function detectCelebrations(){
+  const snap = {};
+  for (const fx of allFixtures()){
+    snap[fx.fixture.id] = {
+      h: fx.goals.home ?? 0, a: fx.goals.away ?? 0, st: fxStatus(fx),
+      reds: (fx.events || []).filter((e) => e.type === "Card" && e.detail === "Red Card").length
+    };
+  }
+  const prev = LS.get("snap", null);
+  LS.set("snap", snap);
+  if (!prev) return; // first run — nothing to compare against
+
+  let goalDelay = 0;
+  for (const fx of allFixtures()){
+    const p = prev[fx.fixture.id], n = snap[fx.fixture.id];
+    if (!p) continue;
+    const home = matchTeam(fx.teams.home), away = matchTeam(fx.teams.away);
+
+    // Goals
+    for (const [team, scored] of [[home, n.h - p.h], [away, n.a - p.a]]){
+      if (team && scored > 0){
+        setTimeout(() => {
+          fireConfetti();
+          showToast(`⚽ <b>GOOOAL!</b> ${esc(team.owner.name)}'s ${esc(team.flag)} ${esc(team.name)}! ` +
+            `${esc(fx.teams.home.name)} ${n.h}-${n.a} ${esc(fx.teams.away.name)}`, "gold");
+          showGoalOverlay(`⚽ GOOOAL! ${esc(team.owner.name)}'s ${esc(team.name)}!`);
+        }, goalDelay);
+        goalDelay += 4500;
+      }
+    }
+    // Red cards (against either side — flash if an owned team is involved)
+    if (n.reds > p.reds && (home || away)){
+      redCardFlash();
+      showToast(`🟥 Red card in ${esc(fx.teams.home.name)} v ${esc(fx.teams.away.name)}!`, "red");
+    }
+    // Full-time wins
+    if (!FINISHED_STATUSES.has(p.st) && FINISHED_STATUSES.has(n.st)){
+      const winner = n.h > n.a ? home : n.a > n.h ? away : null;
+      if (winner){
+        trophyShake(winner.owner.name);
+        showToast(`🏆 <b>FT:</b> ${esc(winner.owner.name)}'s ${esc(winner.name)} wins ` +
+          `${Math.max(n.h, n.a)}-${Math.min(n.h, n.a)}!`, "gold");
+      }
+    }
+  }
+}
+
+/* ============================================================
+   11. REFRESH CYCLE + POLLING
+   ============================================================ */
+let lastScheduleForce = 0;
+
+async function refresh(){
+  state.degraded = false;
+  networkCallsThisCycle = 0;
+
+  // 1) Full schedule (1 request, cached) — all WC fixtures + scores + rounds.
+  const sched = await api("fixtures",
+    { league: CONFIG.leagueId, season: CONFIG.season, timezone: CONFIG.timezone },
+    CONFIG.scheduleTtlMs);
+  if (sched && sched.response) for (const fx of sched.response) {
+    const existing = state.fixtures.get(fx.fixture.id);
+    if (existing && existing.events && !fx.events) fx.events = existing.events; // keep live events
+    state.fixtures.set(fx.fixture.id, fx);
+  }
+
+  // 2) Live scores + events — only while a match window is open (1 request).
+  if (inLiveWindow()){
+    const live = await api("fixtures", { live: "all" }, CONFIG.liveTtlMs);
+    if (live && live.response){
+      for (const fx of live.response){
+        if (fx.league && fx.league.id === CONFIG.leagueId) state.fixtures.set(fx.fixture.id, fx);
+      }
+    }
+  }
+
+  // 3) Match statistics (cards/saves) for finished games we haven't stored yet.
+  //    Cached forever once fetched; budget-capped per cycle.
+  let newStats = 0;
+  for (const fx of allFixtures()){
+    if (newStats >= CONFIG.maxStatsFetchPerCycle) break;
+    if (!isDoneFx(fx)) continue;
+    if (!(matchTeam(fx.teams.home) || matchTeam(fx.teams.away))) continue;
+    const key = "api:fixtures/statistics:" + new URLSearchParams({ fixture: fx.fixture.id }).toString();
+    if (LS.get(key, null)) continue;
+    const before = networkCallsThisCycle;
+    await api("fixtures/statistics", { fixture: fx.fixture.id }, Infinity);
+    if (networkCallsThisCycle > before) newStats++;
+  }
+
+  // 4) Group letters from standings (cheap, 6-hourly).
+  const standings = await api("standings", { league: CONFIG.leagueId, season: CONFIG.season }, CONFIG.standingsTtlMs);
+  try {
+    const blocks = standings.response[0].league.standings;
+    for (const block of blocks){
+      for (const row of block){
+        const grp = String(row.group || "").replace(/group\s*/i, "").trim();
+        state.groups[norm(row.team.name)] = grp || "–";
+      }
+    }
+  } catch (e) { /* standings not published yet — group shows "–" */ }
+
+  state.lastUpdated = new Date();
+  computeModel();
+  renderAll();
+  detectCelebrations();
+  scheduleNextPoll();
+}
+
+function scheduleNextPoll(){
+  clearTimeout(state.pollTimer);
+  const ms = inLiveWindow() ? CONFIG.pollLiveMs : CONFIG.pollIdleMs;
+  state.pollTimer = setTimeout(refresh, ms);
+}
+// Catch up immediately when the tab comes back to the foreground.
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && state.lastUpdated && Date.now() - state.lastUpdated > CONFIG.pollLiveMs){
+    refresh();
+  }
+});
+
+/* ============================================================
+   12. ADMIN PANEL (?admin=true)
+   ============================================================ */
+function saveOverrides(){
+  LS.set("overrides", state.overrides);
+  computeModel();
+  renderAll();
+  renderAdmin();
+}
+
+function renderAdmin(){
+  // Adjustments list
+  $("#admPtsList").innerHTML = (state.overrides.pointAdjustments || []).map((a, i) =>
+    `<li><span>${esc(a.participant)}: <b>${a.points > 0 ? "+" : ""}${esc(String(a.points))}</b> ${esc(a.reason || "")}</span><button data-del-pts="${i}">✕</button></li>`).join("") || "<li>None yet</li>";
+  // Messages list
+  $("#admMsgList").innerHTML = (state.overrides.tickerMessages || []).map((m, i) =>
+    `<li><span>${esc(m)}</span><button data-del-msg="${i}">✕</button></li>`).join("") || "<li>None yet</li>";
+  // Elimination checkboxes
+  $("#admElim").innerHTML = state.data.participants.map((p) =>
+    p.teams.map((t) => `<label><input type="checkbox" data-elim="${esc(t.name)}"
+      ${(state.overrides.eliminated || []).includes(t.name) ? "checked" : ""}> ${esc(t.flag)} ${esc(t.name)}</label>`).join("")).join("");
+}
+
+function initAdmin(){
+  const params = new URLSearchParams(location.search);
+  if (params.get("admin") !== "true") return;
+  const pass = prompt("Admin passphrase?");
+  if (pass !== CONFIG.adminPass){ alert("Nope. ⚽"); return; }
+
+  $("#admWho").innerHTML = state.data.participants.map((p) => `<option>${esc(p.name)}</option>`).join("");
+  renderAdmin();
+  $("#adminPanel").hidden = false;
+
+  $("#admClose").addEventListener("click", () => { $("#adminPanel").hidden = true; });
+  $("#admAddPts").addEventListener("click", () => {
+    const points = Number($("#admPts").value);
+    if (!points) return alert("Enter a non-zero number of points.");
+    state.overrides.pointAdjustments.push({
+      participant: $("#admWho").value, points, reason: $("#admReason").value.trim()
+    });
+    $("#admPts").value = ""; $("#admReason").value = "";
+    saveOverrides();
+  });
+  $("#admAddMsg").addEventListener("click", () => {
+    const msg = $("#admMsg").value.trim();
+    if (!msg) return;
+    state.overrides.tickerMessages.push(msg);
+    $("#admMsg").value = "";
+    saveOverrides();
+  });
+  $("#adminPanel").addEventListener("click", (e) => {
+    if (e.target.dataset.delPts != null){ state.overrides.pointAdjustments.splice(Number(e.target.dataset.delPts), 1); saveOverrides(); }
+    if (e.target.dataset.delMsg != null){ state.overrides.tickerMessages.splice(Number(e.target.dataset.delMsg), 1); saveOverrides(); }
+  });
+  $("#admElim").addEventListener("change", (e) => {
+    const name = e.target.dataset.elim;
+    if (!name) return;
+    const list = state.overrides.eliminated;
+    if (e.target.checked){ if (!list.includes(name)) list.push(name); }
+    else state.overrides.eliminated = list.filter((n) => n !== name);
+    saveOverrides();
+  });
+  $("#admExport").addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify(state.overrides, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "overrides.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+  $("#admImportBtn").addEventListener("click", () => $("#admImport").click());
+  $("#admImport").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const json = JSON.parse(await file.text());
+      state.overrides = {
+        pointAdjustments: json.pointAdjustments || [],
+        tickerMessages: json.tickerMessages || [],
+        eliminated: json.eliminated || []
+      };
+      saveOverrides();
+    } catch (err) { alert("That file isn't valid overrides JSON."); }
+  });
+  $("#admClear").addEventListener("click", () => {
+    if (!confirm("Wipe ALL local overrides?")) return;
+    state.overrides = { pointAdjustments: [], tickerMessages: [], eliminated: [] };
+    saveOverrides();
+  });
+  $("#footerAdminHint").textContent = " · Admin mode active";
+}
+
+/* ============================================================
+   13. BOOT
+   ============================================================ */
+(async function boot(){
+  try {
+    await loadSweepstake();
+  } catch (e) {
+    document.body.insertAdjacentHTML("afterbegin",
+      `<div class="api-warn">Couldn't load data/sweepstake.json — check the file is deployed.</div>`);
+    return;
+  }
+  computeModel();   // render instantly from cache/zeroes…
+  renderAll();
+  initAdmin();
+  refresh();        // …then hydrate with live data
+})();
+</script>
+</body>
+</html>

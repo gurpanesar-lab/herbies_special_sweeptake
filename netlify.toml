@@ -1,0 +1,12 @@
+# Netlify configuration for the World Cup 2026 Sweepstake dashboard.
+# Static site (no build step) + one serverless function.
+
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+# Make sure JSON data is always fetchable fresh-ish but cacheable.
+[[headers]]
+  for = "/data/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, s-maxage=300, stale-while-revalidate=600"
