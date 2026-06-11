@@ -1,38 +1,29 @@
 /**
  * Netlify Function: scores
  * ------------------------
- * Serverless proxy for API-Football (api-football.com, v3).
- * The API key lives ONLY in the Netlify environment variable FOOTBALL_API_KEY
- * (Site settings → Environment variables) — it is never shipped to the browser.
+ * Proxy for ESPN's public scoreboard API (the same JSON backend espn.com uses).
+ * No API key required — this function exists for CORS safety and CDN caching,
+ * so all your mates hammering the page in the pub share one upstream request.
  *
  * The client calls:
- *   /.netlify/functions/scores?endpoint=fixtures&league=1&season=2026
- *   /.netlify/functions/scores?endpoint=fixtures&live=all
- *   /.netlify/functions/scores?endpoint=fixtures/statistics&fixture=12345
- *   /.netlify/functions/scores?endpoint=fixtures/events&fixture=12345
- *   /.netlify/functions/scores?endpoint=standings&league=1&season=2026
- *
- * Only whitelisted endpoints/params are forwarded, so the function can't be
- * abused as an open proxy. Responses carry CDN cache headers (s-maxage) so
- * multiple viewers share one upstream request — this matters a lot on the
- * free tier (100 requests/day).
+ *   /.netlify/functions/scores?endpoint=scoreboard&dates=20260611-20260719&limit=300
+ *   /.netlify/functions/scores?endpoint=summary&event=760415
+ *   /.netlify/functions/scores?endpoint=standings&season=2026
  */
 
-const API_BASE = "https://v3.football.api-sports.io";
+const LEAGUE = "fifa.world"; // ESPN league slug for the FIFA World Cup
 
-// Endpoints the client is allowed to hit.
-const ALLOWED_ENDPOINTS = new Set([
-  "fixtures",
-  "fixtures/events",
-  "fixtures/statistics",
-  "standings",
-]);
+const ENDPOINTS = {
+  scoreboard: `https://site.api.espn.com/apis/site/v2/sports/soccer/${LEAGUE}/scoreboard`,
+  summary: `https://site.api.espn.com/apis/site/v2/sports/soccer/${LEAGUE}/summary`,
+  standings: `https://site.api.espn.com/apis/v2/sports/soccer/${LEAGUE}/standings`,
+};
 
 // Query params we forward upstream.
-const ALLOWED_PARAMS = new Set([
-  "league", "season", "live", "fixture", "ids",
-  "date", "from", "to", "round", "team", "timezone",
-]);
+const ALLOWED_PARAMS = new Set(["dates", "limit", "event", "season"]);
+
+// CDN cache lifetime per endpoint (seconds).
+const CACHE_SECONDS = { scoreboard: 55, summary: 3600, standings: 3600 };
 
 exports.handler = async (event) => {
   const headers = {
@@ -40,21 +31,11 @@ exports.handler = async (event) => {
     "Access-Control-Allow-Origin": "*",
   };
 
-  const apiKey = process.env.FOOTBALL_API_KEY;
-  if (!apiKey) {
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({
-        error: "FOOTBALL_API_KEY is not set. Add it in Netlify → Site settings → Environment variables, then redeploy.",
-      }),
-    };
-  }
-
   const qs = event.queryStringParameters || {};
   const endpoint = qs.endpoint || "";
+  const base = ENDPOINTS[endpoint];
 
-  if (!ALLOWED_ENDPOINTS.has(endpoint)) {
+  if (!base) {
     return {
       statusCode: 400,
       headers,
@@ -62,31 +43,22 @@ exports.handler = async (event) => {
     };
   }
 
-  // Build the upstream URL from whitelisted params only.
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(qs)) {
     if (key !== "endpoint" && ALLOWED_PARAMS.has(key) && value !== "") {
       params.set(key, value);
     }
   }
-  const url = `${API_BASE}/${endpoint}${params.toString() ? "?" + params.toString() : ""}`;
+  const url = `${base}${params.toString() ? "?" + params.toString() : ""}`;
 
   try {
-    const res = await fetch(url, {
-      headers: { "x-apisports-key": apiKey },
-    });
+    const res = await fetch(url, { headers: { "User-Agent": "sweepstake-dashboard" } });
     const body = await res.text();
-
-    // CDN caching: live data is cached ~55s, everything else 5 min.
-    // stale-while-revalidate keeps the page snappy while refreshing in the background.
-    const isLive = "live" in qs;
-    const sMaxAge = isLive ? 55 : 300;
-
     return {
       statusCode: res.status,
       headers: {
         ...headers,
-        "Cache-Control": `public, max-age=0, s-maxage=${sMaxAge}, stale-while-revalidate=600`,
+        "Cache-Control": `public, max-age=0, s-maxage=${CACHE_SECONDS[endpoint]}, stale-while-revalidate=600`,
       },
       body,
     };

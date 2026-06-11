@@ -357,7 +357,7 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;font-size:.72rem;color
 </main>
 
 <footer>
-  All kick-off times shown in UK time (Europe/London). Data via API-Football.
+  All kick-off times shown in UK time (Europe/London). Data via ESPN's public scoreboard feed.
   <span id="footerAdminHint"></span>
 </footer>
 
@@ -424,16 +424,15 @@ const SCORING = {
    2. APP CONFIG — polling, API, admin.
    ============================================================ */
 const CONFIG = {
-  leagueId: 1,                 // API-Football: FIFA World Cup
-  season: 2026,
+  // Data source: ESPN's public scoreboard feed (free, no key) via the Netlify proxy.
   timezone: "Europe/London",   // ALL times shown in UK time
   pollLiveMs: 60 * 1000,       // poll every 60s while a match is live
   pollIdleMs: 10 * 60 * 1000,  // every 10 min otherwise
-  liveTtlMs: 55 * 1000,        // cache lifetime of the live-scores call
-  scheduleTtlMs: 60 * 60 * 1000,   // full schedule refreshed hourly (also forced on FT)
+  liveTtlMs: 55 * 1000,        // scoreboard cache lifetime during live windows
+  scheduleTtlMs: 10 * 60 * 1000,      // scoreboard cache lifetime otherwise
   standingsTtlMs: 6 * 60 * 60 * 1000, // group letters, 6-hourly
-  dailyRequestBudget: 95,      // client-side guard for the 100 req/day free tier
-  maxStatsFetchPerCycle: 6,    // max NEW statistics calls per refresh cycle
+  dailyRequestBudget: 2000,    // safety net only — ESPN has no hard daily quota
+  maxSummaryFetchPerCycle: 6,  // max NEW match-summary calls per refresh cycle
   adminPass: "corner-flag",    // ?admin=true passphrase — change me!
   tournamentStart: "2026-06-11",
   tournamentEnd: "2026-07-19"
@@ -609,7 +608,7 @@ function stageOf(round){
   if (r.includes("semi")) return "SF";
   if (r.includes("3rd") || r.includes("third")) return "SF3";   // 3rd-place game: SF stage, no extra bonus
   if (r.includes("final")) return "F";
-  if (r.includes("round of")) return "KO";
+  if (r.includes("round of") || r.includes("rd of")) return "KO"; // ESPN labels: "Round of 32", "Rd of 16"
   return null; // group stage
 }
 
@@ -623,18 +622,126 @@ function inLiveWindow(){
   });
 }
 
-/* Per-team match statistics (cards/saves) for a finished fixture, from cache. */
+/* Per-team match statistics (cards/saves) for a finished fixture, read from
+   the cached ESPN match summary. Returns null fields when ESPN doesn't supply
+   a stat, so we never award "clean game" or saves on missing data. */
 function statsFor(fxId, teamApiId){
-  const cached = LS.get("api:fixtures/statistics:" + new URLSearchParams({fixture: fxId}).toString(), null);
-  const resp = cached && cached.v && cached.v.response;
-  if (!resp || !resp.length) return null;
-  const side = resp.find((s) => s.team && s.team.id === teamApiId);
+  const cached = LS.get("api:summary:" + new URLSearchParams({ event: fxId }).toString(), null);
+  const box = cached && cached.v && cached.v.boxscore && cached.v.boxscore.teams;
+  if (!box) return null;
+  const side = box.find((t) => Number(t.team && t.team.id) === teamApiId);
   if (!side) return null;
-  const get = (type) => {
-    const row = (side.statistics || []).find((x) => x.type === type);
-    return row && row.value != null ? Number(row.value) || 0 : 0;
+  const stat = (re) => {
+    const row = (side.statistics || []).find((x) => re.test(x.name || x.label || ""));
+    return row ? (Number(row.displayValue != null ? row.displayValue : row.value) || 0) : null;
   };
-  return { yellow: get("Yellow Cards"), red: get("Red Cards"), saves: get("Goalkeeper Saves") };
+  const yellow = stat(/yellow/i), red = stat(/red/i), saves = stat(/save/i);
+  return {
+    yellow, red, saves,
+    hasCards: yellow != null && red != null,
+    hasSaves: saves != null
+  };
+}
+
+/* ============================================================
+   7b. ESPN → internal fixture adapter
+   The rest of the app speaks one fixture shape; everything
+   ESPN-specific is contained in the functions below.
+   ============================================================ */
+function espnDates(){
+  return CONFIG.tournamentStart.replace(/-/g, "") + "-" + CONFIG.tournamentEnd.replace(/-/g, "");
+}
+
+/* Stage windows from the scoreboard's calendar (Group / Round of 32 / … / Final). */
+let stageWindows = [];
+function captureCalendar(sb){
+  try {
+    stageWindows = sb.leagues[0].calendar[0].entries.map((e) => ({
+      start: new Date(e.startDate), end: new Date(e.endDate), label: e.label
+    }));
+  } catch (e) { /* keep previous windows */ }
+}
+function roundForDate(d){
+  const w = stageWindows.find((w) => d >= w.start && d <= w.end);
+  return w ? w.label : "Group Stage";
+}
+
+function mapStatus(st){
+  const n = (st && st.type && st.type.name) || "";
+  const M = {
+    STATUS_SCHEDULED: "NS", STATUS_FIRST_HALF: "1H", STATUS_HALFTIME: "HT",
+    STATUS_SECOND_HALF: "2H", STATUS_IN_PROGRESS: "LIVE", STATUS_OVERTIME: "ET",
+    STATUS_SHOOTOUT: "P", STATUS_END_PERIOD: "BT", STATUS_HALFTIME_ET: "BT",
+    STATUS_FULL_TIME: "FT", STATUS_FINAL: "FT", STATUS_FINAL_AET: "AET",
+    STATUS_FINAL_PEN: "PEN", STATUS_POSTPONED: "PST", STATUS_CANCELED: "CANC",
+    STATUS_DELAYED: "INT", STATUS_ABANDONED: "ABD", STATUS_SUSPENDED: "SUSP"
+  };
+  if (M[n]) return M[n];
+  const s = st && st.type && st.type.state;
+  return s === "in" ? "LIVE" : s === "post" ? "FT" : "NS";
+}
+
+/* ESPN in-play "details" → our event objects (goals + cards). */
+function adaptEvents(comp, homeT, awayT){
+  const out = [];
+  for (const d of (comp.details || [])){
+    const txt = (d.type && d.type.text) || "";
+    const isCard = /card/i.test(txt);
+    const isGoal = d.scoringPlay === true || /goal/i.test(txt);
+    if (!isCard && !isGoal) continue;
+    let teamId = Number(d.team && d.team.id);
+    if (isGoal && /own goal/i.test(txt)) teamId = teamId === homeT.id ? awayT.id : homeT.id;
+    const team = teamId === awayT.id ? awayT : homeT;
+    out.push({
+      type: isCard ? "Card" : "Goal",
+      detail: isCard ? (/red/i.test(txt) ? "Red Card" : "Yellow Card") : "Normal Goal",
+      player: { name: (d.athletesInvolved && d.athletesInvolved[0] && d.athletesInvolved[0].displayName) || "" },
+      time: { elapsed: (d.clock && parseInt(d.clock.displayValue, 10)) || null },
+      team: { id: team.id, name: team.name }
+    });
+  }
+  return out;
+}
+
+/* Walk ESPN's standings tree and harvest "Group A"… letters per team. */
+function harvestGroups(node){
+  try {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)){ node.forEach(harvestGroups); return; }
+    if (node.name && /group\s+[a-l]\b/i.test(node.name)){
+      const letter = node.name.replace(/.*group\s*/i, "").trim().slice(0, 1).toUpperCase();
+      const entries = (node.standings && node.standings.entries) || [];
+      for (const e of entries){
+        const nm = e.team && (e.team.displayName || e.team.name);
+        if (nm) state.groups[norm(nm)] = letter;
+      }
+    }
+    if (node.children) harvestGroups(node.children);
+  } catch (e) { /* standings shape changed — groups just show "–" */ }
+}
+
+function adaptEspn(ev){
+  const comp = ev.competitions && ev.competitions[0];
+  if (!comp || !comp.competitors) return null;
+  const hc = comp.competitors.find((c) => c.homeAway === "home") || comp.competitors[0];
+  const ac = comp.competitors.find((c) => c.homeAway === "away") || comp.competitors[1];
+  if (!hc || !ac || !hc.team || !ac.team) return null;
+  const homeT = { id: Number(hc.team.id), name: hc.team.displayName || hc.team.name };
+  const awayT = { id: Number(ac.team.id), name: ac.team.displayName || ac.team.name };
+  const st = comp.status || ev.status || {};
+  let short = mapStatus(st);
+  const penH = hc.shootoutScore != null ? Number(hc.shootoutScore) : null;
+  const penA = ac.shootoutScore != null ? Number(ac.shootoutScore) : null;
+  if ((penH != null || penA != null) && (short === "FT" || short === "AET")) short = "PEN";
+  const elapsed = st.displayClock ? (parseInt(st.displayClock, 10) || null) : null;
+  return {
+    fixture: { id: Number(ev.id), date: ev.date, status: { short, elapsed: LIVE_STATUSES.has(short) ? elapsed : null } },
+    league: { id: 606, round: roundForDate(new Date(ev.date)) },
+    teams: { home: homeT, away: awayT },
+    goals: { home: hc.score != null ? Number(hc.score) : null, away: ac.score != null ? Number(ac.score) : null },
+    score: { penalty: { home: penH, away: penA } },
+    events: adaptEvents(comp, homeT, awayT)
+  };
 }
 
 /* ============================================================
@@ -693,11 +800,12 @@ function computeModel(){
 
         const ms = statsFor(fx.fixture.id, s.api.id);
         if (ms){
-          if (ms.yellow === 0 && ms.red === 0) add(ts, SCORING.cleanGame, `😇 Clean game vs ${oppName}`);
-          if (ms.saves > 0) add(ts, ms.saves * SCORING.savePoint, `🧤 ${ms.saves} save${ms.saves>1?"s":""} vs ${oppName}`);
-          if (ms.red > 0) add(ts, ms.red * SCORING.redCard, `🟥 ${ms.red} red card${ms.red>1?"s":""} vs ${oppName}`);
-          ts.cards += ms.yellow + ms.red; ts.reds += ms.red;
-          ts.saves += ms.saves;
+          // Only award data-dependent points when ESPN actually supplies the stat.
+          if (ms.hasCards && ms.yellow === 0 && ms.red === 0) add(ts, SCORING.cleanGame, `😇 Clean game vs ${oppName}`);
+          if (ms.hasSaves && ms.saves > 0) add(ts, ms.saves * SCORING.savePoint, `🧤 ${ms.saves} save${ms.saves>1?"s":""} vs ${oppName}`);
+          if (ms.hasCards && ms.red > 0) add(ts, ms.red * SCORING.redCard, `🟥 ${ms.red} red card${ms.red>1?"s":""} vs ${oppName}`);
+          ts.cards += (ms.yellow || 0) + (ms.red || 0); ts.reds += ms.red || 0;
+          ts.saves += ms.saves || 0;
         }
         // Knockout loser is out (penalty shootouts: the side with fewer pens).
         if (stage){
@@ -1208,57 +1316,40 @@ function detectCelebrations(){
 /* ============================================================
    11. REFRESH CYCLE + POLLING
    ============================================================ */
-let lastScheduleForce = 0;
-
 async function refresh(){
   state.degraded = false;
   networkCallsThisCycle = 0;
 
-  // 1) Full schedule (1 request, cached) — all WC fixtures + scores + rounds.
-  const sched = await api("fixtures",
-    { league: CONFIG.leagueId, season: CONFIG.season, timezone: CONFIG.timezone },
-    CONFIG.scheduleTtlMs);
-  if (sched && sched.response) for (const fx of sched.response) {
-    const existing = state.fixtures.get(fx.fixture.id);
-    if (existing && existing.events && !fx.events) fx.events = existing.events; // keep live events
-    state.fixtures.set(fx.fixture.id, fx);
-  }
-
-  // 2) Live scores + events — only while a match window is open (1 request).
-  if (inLiveWindow()){
-    const live = await api("fixtures", { live: "all" }, CONFIG.liveTtlMs);
-    if (live && live.response){
-      for (const fx of live.response){
-        if (fx.league && fx.league.id === CONFIG.leagueId) state.fixtures.set(fx.fixture.id, fx);
-      }
+  // 1) ONE scoreboard call covers the entire tournament: schedule, live scores
+  //    AND in-play events. Cached 55s during live windows, 10 min otherwise.
+  const sb = await api("scoreboard",
+    { dates: espnDates(), limit: "300" },
+    inLiveWindow() ? CONFIG.liveTtlMs : CONFIG.scheduleTtlMs);
+  if (sb){
+    captureCalendar(sb);
+    for (const ev of (sb.events || [])){
+      const fx = adaptEspn(ev);
+      if (fx) state.fixtures.set(fx.fixture.id, fx);
     }
   }
 
-  // 3) Match statistics (cards/saves) for finished games we haven't stored yet.
-  //    Cached forever once fetched; budget-capped per cycle.
+  // 2) Match summaries (cards + saves where ESPN provides them) for finished
+  //    games we haven't stored yet — fetched once per match, cached forever.
   let newStats = 0;
   for (const fx of allFixtures()){
-    if (newStats >= CONFIG.maxStatsFetchPerCycle) break;
+    if (newStats >= CONFIG.maxSummaryFetchPerCycle) break;
     if (!isDoneFx(fx)) continue;
     if (!(matchTeam(fx.teams.home) || matchTeam(fx.teams.away))) continue;
-    const key = "api:fixtures/statistics:" + new URLSearchParams({ fixture: fx.fixture.id }).toString();
+    const key = "api:summary:" + new URLSearchParams({ event: fx.fixture.id }).toString();
     if (LS.get(key, null)) continue;
     const before = networkCallsThisCycle;
-    await api("fixtures/statistics", { fixture: fx.fixture.id }, Infinity);
+    await api("summary", { event: fx.fixture.id }, Infinity);
     if (networkCallsThisCycle > before) newStats++;
   }
 
-  // 4) Group letters from standings (cheap, 6-hourly).
-  const standings = await api("standings", { league: CONFIG.leagueId, season: CONFIG.season }, CONFIG.standingsTtlMs);
-  try {
-    const blocks = standings.response[0].league.standings;
-    for (const block of blocks){
-      for (const row of block){
-        const grp = String(row.group || "").replace(/group\s*/i, "").trim();
-        state.groups[norm(row.team.name)] = grp || "–";
-      }
-    }
-  } catch (e) { /* standings not published yet — group shows "–" */ }
+  // 3) Group letters from standings (tolerant of ESPN's nesting; 6-hourly).
+  const standings = await api("standings", { season: "2026" }, CONFIG.standingsTtlMs);
+  if (standings) harvestGroups(standings.children || standings);
 
   state.lastUpdated = new Date();
   computeModel();

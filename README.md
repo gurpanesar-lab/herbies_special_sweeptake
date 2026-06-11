@@ -1,15 +1,18 @@
 # ⚽ World Cup 2026 Sweepstake Dashboard
 
 Live dashboard for an 8-person, 48-team World Cup 2026 sweepstake. Single-page
-vanilla JS app — no build step, no frameworks — deployed on Netlify with a
-serverless proxy so the API key never reaches the browser.
+vanilla JS app — no build step, no frameworks — deployed on Netlify.
+
+**Data source: ESPN's public scoreboard feed.** It's free, needs **no API key**,
+and carries live scores plus in-play goal/card events. (The app originally used
+API-Football, but their free tier doesn't include season 2026.)
 
 ## Repo layout
 
 | File | What it is |
 |---|---|
 | `index.html` | The whole app (inline CSS + JS) |
-| `netlify/functions/scores.js` | Proxy to API-Football — holds the key server-side |
+| `netlify/functions/scores.js` | Proxy to ESPN — handles CORS + CDN caching |
 | `netlify.toml` | Netlify config (publish dir + functions dir) |
 | `data/sweepstake.json` | Who owns which teams — **edit this, not the code** |
 | `data/overrides.json` | *(optional)* admin corrections exported from the admin panel |
@@ -19,58 +22,50 @@ serverless proxy so the API key never reaches the browser.
 1. Push this repo to GitHub.
 2. In [Netlify](https://app.netlify.com): **Add new site → Import an existing project → GitHub** → pick the repo.
 3. Build settings: leave the build command **empty**, publish directory `.` (netlify.toml handles it).
-4. **Add the API key** (before or after the first deploy):
-   - Site configuration → **Environment variables** → *Add a variable*
-   - Key: `FOOTBALL_API_KEY`
-   - Value: your key from [dashboard.api-football.com](https://dashboard.api-football.com)
-   - Scope: all (or at least *Functions*)
-5. **Trigger a redeploy** (Deploys → Trigger deploy) so the function picks up the variable.
-
-That's it. Every push to `main` redeploys automatically.
-
-> 🔑 Never commit the key to the repo. If it ever leaks (e.g. pasted somewhere
-> public), rotate it in the API-Football dashboard and update the Netlify variable.
+4. Done. **No API key or environment variables needed.** (If you previously
+   added `FOOTBALL_API_KEY`, you can delete it.) Every push to `main` redeploys.
 
 ## Local development
 
 ```bash
 npm i -g netlify-cli
-export FOOTBALL_API_KEY=your_key_here   # or put it in a .env file (gitignored)
-netlify dev                              # serves the site + function on :8888
+netlify dev   # serves the site + function on :8888
 ```
 
 ## Editing the sweepstake
 
 Everything lives in `data/sweepstake.json` — names, team lists, chip colours,
-flag emoji. `aliases` help match API-Football's naming (e.g. *Korea Republic* →
-South Korea); matching is accent- and case-insensitive, so you rarely need them.
+flag emoji. `aliases` help match ESPN's naming (e.g. *Czechia* → Czech
+Republic); matching is accent- and case-insensitive.
 
 ## Tweaking scoring & polling
 
 Both live at the **top of the `<script>` in `index.html`**:
 
 - `SCORING` — points per goal/win/draw/clean sheet/save/red card/stage bonuses.
-- `CONFIG` — polling intervals, cache lifetimes, the admin passphrase
-  (`adminPass`, default `corner-flag` — **change it**), and the daily request
-  budget guard.
+- `CONFIG` — polling intervals, cache lifetimes, and the admin passphrase
+  (`adminPass`, default `corner-flag` — **change it**).
 
-## Rate limits (free tier: 100 requests/day)
+## How data flows
 
-The app is aggressive about caching:
+- **One** scoreboard request returns the whole tournament: schedule, live
+  scores and in-play events. Polled every 60s during matches, 10 min otherwise.
+- Per-match summaries (cards, and goalkeeper saves where ESPN provides them)
+  are fetched **once per finished match** and cached in localStorage forever.
+- The Netlify function adds CDN cache headers, so the whole pub shares one
+  upstream request per minute.
+- If ESPN is unreachable, the page serves the last cached data and shows a
+  banner — it never breaks.
 
-- One request fetches the **entire tournament schedule** (cached 1h).
-- Live scores+events come from **one** `live=all` call, only polled while a
-  match window is actually open (60s cadence; 10 min otherwise).
-- Match statistics (cards/saves) are fetched **once per finished match** and
-  cached in localStorage forever.
-- The Netlify function adds CDN `s-maxage` headers, so all 8 of you hammering
-  the page in the pub still produces ~1 upstream request per minute.
-- A client-side budget counter stops calling the API after ~95 requests/day and
-  falls back to cached data with a warning banner.
+**Note on saves:** ESPN doesn't always publish goalkeeper saves. When the stat
+is missing, no save points are awarded automatically — use the admin panel to
+add them manually (same for any stat you think is wrong). "Clean game" points
+are likewise only awarded when card data is actually present.
 
-⚠️ Even so, 60-second polling through long multi-match days can brush against
-100 req/day on a single device. If you see the cached-data banner often, either
-bump `pollLiveMs` to 120–300s or upgrade the API plan.
+**Note on the feed:** ESPN's endpoints are unofficial (the same JSON the ESPN
+site itself uses). They've been stable for years, but if they ever change
+mid-tournament, scoring corrections can be applied via the admin panel while
+the code is updated.
 
 ## Admin mode
 
@@ -87,12 +82,9 @@ Open the site with `?admin=true` and enter the passphrase. You can:
 
 `GOAL_GIFS` in `index.html` lists Giphy URLs. If one dies, the overlay falls
 back to a bouncing ⚽. To use local GIFs, drop files in `assets/gifs/` and
-change the URLs (local files also don't count against your Lighthouse score —
-they're only loaded when someone scores).
+change the URLs.
 
 ## Notes
 
 - All kick-off times display in UK time (Europe/London), regardless of device.
-- League/season: API-Football league `1`, season `2026` (set in `CONFIG`).
-- If the API is unreachable, the page silently serves the last cached data and
-  shows a banner — it never breaks.
+- ESPN league slug: `fifa.world` (hardcoded in `netlify/functions/scores.js`).
