@@ -510,6 +510,7 @@ const SCORING = {
   savePoint: 1,         // per goalkeeper save (needs match stats)
   shootoutWin: 4,       // winning a penalty shootout (on top of the draw points)
   redCard: -3,          // each red card against your team
+  yellowCard: -1,       // each yellow card against your team
   reachKnockouts: 5,    // team appears in Round of 32 / Round of 16
   reachQuarterFinal: 8, // additionally, on reaching the QF
   reachSemiFinal: 12,   // additionally, on reaching the SF
@@ -954,6 +955,7 @@ function computeModel(){
           if (ms.hasCards && ms.yellow === 0 && ms.red === 0) add(ts, SCORING.cleanGame, `😇 Clean game vs ${oppName}`);
           if (ms.hasSaves && ms.saves > 0) add(ts, ms.saves * SCORING.savePoint, `🧤 ${ms.saves} save${ms.saves>1?"s":""} vs ${oppName}`);
           if (ms.hasCards && ms.red > 0) add(ts, ms.red * SCORING.redCard, `🟥 ${ms.red} red card${ms.red>1?"s":""} vs ${oppName}`);
+          if (ms.hasCards && ms.yellow > 0) add(ts, ms.yellow * SCORING.yellowCard, `🟨 ${ms.yellow} yellow card${ms.yellow>1?"s":""} vs ${oppName}`);
           ts.cards += (ms.yellow || 0) + (ms.red || 0); ts.reds += ms.red || 0;
           ts.saves += ms.saves || 0;
         }
@@ -1574,7 +1576,8 @@ const RULE_LABELS = {
   goal: "⚽ Goal scored by your team", win: "✅ Win", draw: "🤝 Draw",
   cleanSheet: "🧱 Clean sheet", cleanGame: "😇 No cards for your team",
   savePoint: "🧤 Per goalkeeper save", shootoutWin: "🎯 Penalty shootout win",
-  redCard: "🟥 Red card against your team", reachKnockouts: "🚪 Reach the knockouts",
+  redCard: "🟥 Red card against your team", yellowCard: "🟨 Yellow card against your team",
+  reachKnockouts: "🚪 Reach the knockouts",
   reachQuarterFinal: "🎯 Reach the quarter-finals", reachSemiFinal: "🔥 Reach the semi-finals",
   reachFinal: "🏟 Reach the final", winTournament: "🏆 Win the World Cup"
 };
