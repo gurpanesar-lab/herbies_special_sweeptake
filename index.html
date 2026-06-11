@@ -112,11 +112,14 @@ button{font-family:inherit;cursor:pointer}
 .spot-nav:hover{color:var(--txt);border-color:var(--line-strong)}
 .spot-slide{flex:1;min-width:0;text-align:center;padding:6px 4px}
 .spot-tag{font-family:var(--display);font-size:.72rem;letter-spacing:.16em;color:var(--hot);margin-bottom:8px}
-.spot-teams{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap}
-.spot-side{min-width:110px}
+/* Rigid 3-column grid: both sides always equal width, score dead-centre —
+   no flex-wrap misalignment on narrow phones. */
+.spot-teams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;text-align:center}
+.spot-side{min-width:0}
+.spot-side .owner-chip{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .spot-flag{font-size:2.1rem;display:block}
-.spot-team{font-weight:700;font-size:.98rem}
-.spot-score{font-size:2rem;color:var(--gold);min-width:90px}
+.spot-team{font-weight:700;font-size:.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.spot-score{font-size:1.9rem;color:var(--gold);min-width:72px;text-align:center}
 .spot-when{font-size:.85rem;color:var(--muted);margin-top:8px}
 .spot-detail{font-size:.8rem;color:var(--muted);margin-top:6px;line-height:1.5}
 .spot-dots{text-align:center;margin-top:10px}
@@ -229,6 +232,19 @@ button{font-family:inherit;cursor:pointer}
 .fx-st{display:block;font-size:.64rem;color:var(--dim);letter-spacing:.08em;margin-top:1px}
 .fx-fire{flex:none}
 .fx-empty{color:var(--muted);font-size:.88rem;padding:14px 4px}
+
+/* ============ Knockout bracket ============ */
+.bracket{display:flex;gap:12px;overflow-x:auto;padding:4px 2px 10px;-webkit-overflow-scrolling:touch}
+.bk-col{flex:none;width:174px;display:flex;flex-direction:column;justify-content:space-around;gap:8px}
+.bk-col-title{font-family:var(--display);font-size:.66rem;letter-spacing:.12em;color:var(--muted);text-align:center}
+.bk-match{background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:10px;padding:7px 9px;font-size:.78rem}
+.bk-match.live{border-color:rgba(255,107,107,.75)}
+.bk-t{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 0;cursor:pointer}
+.bk-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bk-sc{font-family:var(--display);color:var(--muted);flex:none}
+.bk-won .bk-nm,.bk-won .bk-sc{color:var(--gold);font-weight:700}
+.bk-tbd{color:var(--dim);cursor:default}
+.bk-when{font-size:.64rem;color:var(--dim);margin-top:4px;text-align:center}
 
 /* ============ Stats corner ============ */
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:12px}
@@ -345,6 +361,11 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;font-size:.72rem;color
   .tab{padding:8px 18px;font-size:.85rem}       /* bigger tap targets */
   .spot-nav{padding:0 14px}
   .team-row{padding:8px 12px}
+  .spot-flag{font-size:1.7rem}
+  .spot-score{font-size:1.45rem;min-width:58px}
+  .spot-team{font-size:.84rem}
+  .spot-nav{padding:0 9px;font-size:1.1rem}
+  .spot-when,.spot-detail{font-size:.76rem}
   .lb-table{font-size:.84rem}
   .lb-table td{padding:10px 6px}
   .tick-item{font-size:.84rem;padding:0 26px}
@@ -416,6 +437,11 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;font-size:.72rem;color
       <button class="tab" data-tab="results" role="tab">Results</button>
     </div>
     <div id="fixturesList"></div>
+  </section>
+
+  <section class="panel" id="bracketPanel" hidden>
+    <h2>🏆 The Road to the Final</h2>
+    <div class="bracket" id="bracket"></div>
   </section>
 
   <section class="panel">
@@ -956,6 +982,20 @@ function computeModel(){
     }
   }
 
+  // Auto-eliminate group-stage exits: once the group stage is over, any team
+  // with no knockout fixture is out. Self-correcting — ESPN names knockout
+  // ties progressively, so if a team shows up in one later, they come straight
+  // back. (Knockout losers are already eliminated in the loop above.)
+  const groupWindows = stageWindows.filter((w) => !stageOf(w.label));
+  const groupEnd = groupWindows.length ? Math.max(...groupWindows.map((w) => +w.end)) : null;
+  if (groupEnd && Date.now() > groupEnd){
+    for (const ts of T.values()){
+      const inKnockouts = fixtures.some((fx) => stageOf(fx.league.round) &&
+        (matchTeam(fx.teams.home) === ts.team || matchTeam(fx.teams.away) === ts.team));
+      if (!inKnockouts) ts.eliminated = true;
+    }
+  }
+
   // Stage bonuses (cumulative, as configured in SCORING).
   for (const ts of T.values()){
     const reached = { GROUP: 0, KO: 1, QF: 2, SF: 3, F: 4 }[ts.stage] || 0;
@@ -1300,7 +1340,8 @@ function renderFixtures(){
   }
   let html = "", lastDay = "";
   for (const fx of list){
-    const day = fmtDay(kickoff(fx));
+    // During the knockouts, label each day group with its round too.
+    const day = fmtDay(kickoff(fx)) + (stageOf(fx.league.round) ? " — " + fx.league.round : "");
     if (day !== lastDay){ html += `<div class="fx-day">${esc(day)}</div>`; lastDay = day; }
     html += fxRow(fx);
   }
@@ -1313,6 +1354,60 @@ document.querySelector(".tabs").addEventListener("click", (e) => {
   for (const t of document.querySelectorAll(".tab")) t.classList.toggle("active", t === tab);
   renderFixtures();
 });
+
+/* ---------- Knockout bracket (appears automatically once KO ties exist) ---------- */
+const BRACKET_STAGES = [
+  { re: /(round|rd) of 32/i, title: "ROUND OF 32" },
+  { re: /(round|rd) of 16/i, title: "ROUND OF 16" },
+  { re: /quarter/i, title: "QUARTER-FINALS" },
+  { re: /semi/i, title: "SEMI-FINALS" },
+  { re: /3rd|third/i, title: "3RD PLACE" },
+  { re: /final/i, title: "FINAL" }
+];
+
+function bkSide(fx, side){
+  const apiT = fx.teams[side], opp = side === "home" ? "away" : "home";
+  const t = matchTeam(apiT);
+  const g = fx.goals[side];
+  const done = isDoneFx(fx), live = isLiveFx(fx);
+  const pens = (fx.score && fx.score.penalty) || {};
+  let won = false;
+  if (done){
+    won = fxStatus(fx) === "PEN"
+      ? (pens[side] || 0) > (pens[opp] || 0)
+      : g > fx.goals[opp];
+  }
+  const tbd = !t; // placeholder until ESPN names the team
+  return `<div class="bk-t${won ? " bk-won" : ""}${tbd ? " bk-tbd" : ""}"${t ? ` data-team="${esc(t.name)}"` : ""}>
+    <span class="bk-nm">${t ? esc(t.flag) + " " : ""}${esc(apiT.name)}</span>
+    <span class="bk-sc">${done || live ? (g ?? 0) + (fxStatus(fx) === "PEN" && pens[side] != null ? ` (${pens[side]})` : "") : ""}</span>
+  </div>`;
+}
+
+function renderBracket(){
+  const ko = allFixtures().filter((fx) => stageOf(fx.league.round)).sort((a, b) => kickoff(a) - kickoff(b));
+  $("#bracketPanel").hidden = !ko.length;
+  if (!ko.length) return;
+  const used = new Set();
+  const cols = BRACKET_STAGES.map((s) => ({
+    s,
+    fxs: ko.filter((fx) => {
+      if (used.has(fx.fixture.id) || !s.re.test(fx.league.round)) return false;
+      used.add(fx.fixture.id);
+      return true;
+    })
+  })).filter((c) => c.fxs.length);
+  $("#bracket").innerHTML = cols.map((c) => `
+    <div class="bk-col">
+      <div class="bk-col-title">${c.s.title}</div>
+      ${c.fxs.map((fx) => `
+        <div class="bk-match${isLiveFx(fx) ? " live" : ""}">
+          ${bkSide(fx, "home")}
+          ${bkSide(fx, "away")}
+          <div class="bk-when">${isDoneFx(fx) ? "FT" : isLiveFx(fx) ? "🔴 LIVE" : esc(fmtDayTime(kickoff(fx)))}</div>
+        </div>`).join("")}
+    </div>`).join("");
+}
 
 /* ---------- Stats corner ---------- */
 function renderStats(){
@@ -1352,6 +1447,7 @@ function renderAll(force){
     renderGrid();
     renderLeaderboard();
     renderFixtures();
+    renderBracket();
     renderStats();
   }
 }
