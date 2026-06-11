@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>World Cup 2026 Sweepstake</title>
 <meta name="description" content="Live World Cup 2026 sweepstake dashboard — 8 owners, 48 teams, one trophy.">
-<meta name="theme-color" content="#06321e">
+<meta name="theme-color" content="#0b4a31">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,32 +16,34 @@
    THEME — dark stadium / pitch aesthetic
    ============================================================ */
 :root{
-  --pitch-1:#052b1a; --pitch-2:#0a4528; --pitch-3:#0d5530;
-  --panel:rgba(8,38,23,.78); --panel-solid:#0a3320;
-  --line:rgba(255,255,255,.09); --line-strong:rgba(255,255,255,.18);
-  --txt:#eef5f0; --muted:#9db8aa; --dim:#6e8a7c;
-  --accent:#4ade80; --hot:#fb923c; --danger:#ef4444;
-  --gold:#fbbf24; --silver:#cbd5e1; --bronze:#d97706;
+  /* Brighter, modern emerald palette — still a stadium at night, less of a cave. */
+  --pitch-1:#0b4a31; --pitch-2:#127a4e; --pitch-3:#15875a;
+  --panel:rgba(255,255,255,.07); --panel-solid:#0f5c3c;
+  --line:rgba(255,255,255,.16); --line-strong:rgba(255,255,255,.3);
+  --txt:#f4fbf7; --muted:#c2ddd0; --dim:#93b6a6;
+  --accent:#34d399; --hot:#ffb454; --danger:#ff6b6b;
+  --gold:#ffd166; --silver:#e2e8f0; --bronze:#f0a05e;
   --display:'Russo One',system-ui,sans-serif;
   --body:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
   --radius:14px;
 }
-*{box-sizing:border-box;margin:0;padding:0}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html{scroll-behavior:smooth}
+button,.tab,.lb-row{touch-action:manipulation}
 body{
   font-family:var(--body);color:var(--txt);min-height:100vh;
-  background:linear-gradient(160deg,var(--pitch-1) 0%,var(--pitch-2) 55%,var(--pitch-1) 100%);
-  background-attachment:fixed;
+  /* No background-attachment:fixed — it forces full repaints on mobile scroll. */
+  background:var(--pitch-1) linear-gradient(160deg,var(--pitch-1) 0%,var(--pitch-2) 55%,var(--pitch-1) 100%);
   -webkit-font-smoothing:antialiased;
 }
 /* Pitch markings: mowing stripes, halfway line, centre circle */
 body::before{
   content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   background:
-    radial-gradient(circle at 50% 42vh,transparent 0 117px,rgba(255,255,255,.055) 117px 120px,transparent 120px),
-    radial-gradient(circle at 50% 42vh,rgba(255,255,255,.05) 0 4px,transparent 5px),
-    linear-gradient(rgba(255,255,255,.05),rgba(255,255,255,.05)) 0 42vh/100% 2px no-repeat,
-    repeating-linear-gradient(90deg,rgba(255,255,255,.016) 0 90px,transparent 90px 180px);
+    radial-gradient(circle at 50% 42vh,transparent 0 117px,rgba(255,255,255,.08) 117px 120px,transparent 120px),
+    radial-gradient(circle at 50% 42vh,rgba(255,255,255,.07) 0 4px,transparent 5px),
+    linear-gradient(rgba(255,255,255,.07),rgba(255,255,255,.07)) 0 42vh/100% 2px no-repeat,
+    repeating-linear-gradient(90deg,rgba(255,255,255,.025) 0 90px,transparent 90px 180px);
 }
 main{max-width:1180px;margin:0 auto;padding:0 14px 60px}
 h2{font-family:var(--display);font-size:1.15rem;letter-spacing:.04em;margin-bottom:14px;color:var(--txt)}
@@ -72,11 +74,12 @@ button{font-family:inherit;cursor:pointer}
 }
 .cd-label{font-family:var(--display);font-size:.7rem;color:var(--hot);letter-spacing:.14em}
 .cd-match{font-size:.92rem;color:var(--txt)}
-.cd-clock{font-size:1.5rem;color:var(--gold);margin-left:auto}
+/* Fixed min-width stops the ticking clock reflowing the header every second. */
+.cd-clock{font-size:1.5rem;color:var(--gold);margin-left:auto;min-width:9ch;text-align:right}
 
 /* ============ News ticker ============ */
 .ticker{
-  overflow:hidden;background:rgba(0,0,0,.42);border-block:1px solid var(--line);
+  overflow:hidden;background:rgba(0,0,0,.25);border-block:1px solid var(--line);
   padding:8px 0;margin-bottom:22px;
 }
 .ticker-track{display:inline-flex;white-space:nowrap;will-change:transform;animation:tickerScroll 60s linear infinite}
@@ -87,8 +90,9 @@ button{font-family:inherit;cursor:pointer}
 
 /* ============ Panels ============ */
 .panel{
+  /* No backdrop-filter — blur over a patterned background is a mobile perf killer. */
   background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-  padding:18px 16px;margin-bottom:22px;backdrop-filter:blur(3px);
+  padding:18px 16px;margin-bottom:22px;
 }
 
 /* ============ Head-to-head spotlight ============ */
@@ -119,16 +123,24 @@ button{font-family:inherit;cursor:pointer}
 /* ============ The Grid (participant cards) ============ */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(295px,1fr));gap:14px}
 .card{
-  background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,0) 38%),var(--panel-solid);
-  border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
-  transition:transform .22s,box-shadow .22s,border-color .22s;
+  position:relative;
+  background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,0) 38%),var(--panel-solid);
+  border:1px solid var(--line);border-radius:var(--radius);
+  transition:transform .22s,border-color .22s;
 }
-.card:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(0,0,0,.35)}
-.card.live{animation:liveGlow 2.2s ease-in-out infinite;border-color:rgba(74,222,128,.6)}
-@keyframes liveGlow{
-  0%,100%{box-shadow:0 0 6px rgba(74,222,128,.25)}
-  50%{box-shadow:0 0 22px rgba(74,222,128,.6)}
+/* Hover effects only on devices that actually hover — avoids sticky states on touch. */
+@media (hover:hover){
+  .card:hover{transform:translateY(-3px)}
 }
+.card.live{border-color:rgba(74,222,128,.6)}
+/* Glow pulses via OPACITY on a pseudo-element (compositor-only) — animating
+   box-shadow directly forces a repaint every frame. */
+.card.live::after{
+  content:"";position:absolute;inset:-1px;border-radius:var(--radius);pointer-events:none;
+  box-shadow:0 0 22px rgba(74,222,128,.55);opacity:.25;
+  animation:liveGlow 2.2s ease-in-out infinite;
+}
+@keyframes liveGlow{50%{opacity:1}}
 .card.trophy-shake{animation:trophyShake .7s ease-in-out 2}
 @keyframes trophyShake{
   0%,100%{transform:rotate(0)}20%{transform:rotate(-2.4deg)}40%{transform:rotate(2.4deg)}
@@ -165,7 +177,9 @@ button{font-family:inherit;cursor:pointer}
 }
 .lb-table td{padding:9px 8px;border-bottom:1px solid var(--line)}
 .lb-row{cursor:pointer;transition:background .15s}
-.lb-row:hover{background:rgba(255,255,255,.04)}
+@media (hover:hover){
+  .lb-row:hover{background:rgba(255,255,255,.06)}
+}
 .lb-rank{font-family:var(--display);width:40px}
 .lb-row.gold .lb-rank{color:var(--gold)}
 .lb-row.silver .lb-rank{color:var(--silver)}
@@ -175,7 +189,7 @@ button{font-family:inherit;cursor:pointer}
 .lb-row.bronze td:first-child{box-shadow:inset 3px 0 0 var(--bronze)}
 .lb-pts{font-family:var(--display);color:var(--gold);text-align:right}
 .lb-num{text-align:right;color:var(--muted)}
-.lb-break td{background:rgba(0,0,0,.28);font-size:.8rem;padding:10px 14px}
+.lb-break td{background:rgba(0,0,0,.18);font-size:.8rem;padding:10px 14px}
 .lb-break ul{list-style:none}
 .lb-break li{padding:2.5px 0;color:var(--muted);display:flex;justify-content:space-between;gap:10px}
 .lb-break li b{color:var(--txt);font-weight:600}
@@ -209,7 +223,7 @@ button{font-family:inherit;cursor:pointer}
 /* ============ Stats corner ============ */
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:12px}
 .stat-card{
-  background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;
+  background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;
 }
 .stat-emoji{font-size:1.7rem}
 .stat-title{font-family:var(--display);font-size:.72rem;letter-spacing:.1em;color:var(--muted);margin:6px 0 4px}
@@ -219,7 +233,7 @@ button{font-family:inherit;cursor:pointer}
 /* ============ Toasts ============ */
 #toasts{position:fixed;top:14px;right:14px;z-index:90;display:flex;flex-direction:column;gap:8px;max-width:min(360px,calc(100vw - 28px))}
 .toast{
-  background:#0c2417;border:1px solid var(--line-strong);border-left:4px solid var(--accent);
+  background:#0f4a30;border:1px solid var(--line-strong);border-left:4px solid var(--accent);
   border-radius:10px;padding:11px 14px;font-size:.88rem;box-shadow:0 8px 24px rgba(0,0,0,.45);
   animation:toastIn .3s ease-out;
 }
@@ -248,13 +262,13 @@ button{font-family:inherit;cursor:pointer}
 /* ============ Admin panel ============ */
 #adminPanel{
   position:fixed;top:0;right:0;bottom:0;z-index:95;width:min(430px,100vw);
-  background:#07190f;border-left:1px solid var(--line-strong);padding:18px;overflow-y:auto;
+  background:#0b3823;border-left:1px solid var(--line-strong);padding:18px;overflow-y:auto;
   box-shadow:-12px 0 40px rgba(0,0,0,.5);
 }
 #adminPanel h3{font-family:var(--display);font-size:1rem;color:var(--gold);margin-bottom:12px}
 #adminPanel h4{font-size:.8rem;color:var(--accent);margin:18px 0 8px;letter-spacing:.06em;text-transform:uppercase}
 #adminPanel input,#adminPanel select{
-  background:#0c2417;border:1px solid var(--line-strong);color:var(--txt);border-radius:8px;
+  background:#0d4029;border:1px solid var(--line-strong);color:var(--txt);border-radius:8px;
   padding:7px 9px;font-size:.85rem;width:100%;margin-bottom:6px;font-family:inherit;
 }
 #adminPanel .row{display:flex;gap:6px}
@@ -277,9 +291,17 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;font-size:.72rem;color
 /* ============ Mobile ============ */
 @media (max-width:640px){
   .hdr-meta{text-align:left}
-  .cd-clock{margin-left:0;width:100%}
-  .panel{padding:14px 12px}
-  .fx-team{min-width:100px}
+  .cd-clock{margin-left:0;width:100%;text-align:left}
+  .panel{padding:14px 12px;margin-bottom:16px}
+  main{padding:0 10px calc(40px + env(safe-area-inset-bottom))}
+  .grid{grid-template-columns:1fr;gap:12px}     /* full-width cards on phones */
+  .fx-team{min-width:96px;font-size:.82rem}
+  .tab{padding:8px 18px;font-size:.85rem}       /* bigger tap targets */
+  .spot-nav{padding:0 14px}
+  .team-row{padding:8px 12px}
+  .lb-table{font-size:.84rem}
+  .lb-table td{padding:10px 6px}
+  .tick-item{font-size:.84rem;padding:0 26px}
 }
 
 /* ============ Reduced motion ============ */
@@ -467,10 +489,15 @@ function norm(s){
     .toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
 }
 const UK = { timeZone: CONFIG.timezone };
-function fmtTime(d){ return new Intl.DateTimeFormat("en-GB",{...UK,hour:"2-digit",minute:"2-digit"}).format(d); }
-function fmtDay(d){ return new Intl.DateTimeFormat("en-GB",{...UK,weekday:"short",day:"numeric",month:"short"}).format(d); }
+/* Intl.DateTimeFormat construction is expensive (~1ms each) — build each
+   formatter ONCE instead of per fixture per render. */
+const _fTime = new Intl.DateTimeFormat("en-GB", {...UK, hour: "2-digit", minute: "2-digit"});
+const _fDay  = new Intl.DateTimeFormat("en-GB", {...UK, weekday: "short", day: "numeric", month: "short"});
+const _fKey  = new Intl.DateTimeFormat("en-CA", {...UK, year: "numeric", month: "2-digit", day: "2-digit"});
+function fmtTime(d){ return _fTime.format(d); }
+function fmtDay(d){ return _fDay.format(d); }
 function fmtDayTime(d){ return fmtDay(d) + " " + fmtTime(d); }
-function ukDateKey(d){ return new Intl.DateTimeFormat("en-CA",{...UK,year:"numeric",month:"2-digit",day:"2-digit"}).format(d); }
+function ukDateKey(d){ return _fKey.format(d); }
 
 /* localStorage wrapper (everything namespaced under wcss_). */
 const LS = {
@@ -478,6 +505,10 @@ const LS = {
   set(k, v){ try { localStorage.setItem("wcss_"+k, JSON.stringify(v)); } catch(e){ /* storage full — fine, we degrade */ } },
   del(k){ try { localStorage.removeItem("wcss_"+k); } catch(e){} }
 };
+// One-off purge of old-format cached API payloads (they could be megabytes).
+try {
+  Object.keys(localStorage).filter((k) => k.startsWith("wcss_api:")).forEach((k) => localStorage.removeItem(k));
+} catch (e) {}
 
 /* ============================================================
    4. STATE
@@ -516,9 +547,11 @@ function budget(){
 }
 
 /* api(): returns cached JSON if fresh; otherwise fetches via the Netlify proxy.
+   `transform` slims huge payloads BEFORE caching, so localStorage writes on the
+   main thread stay tiny (ESPN responses carry megabytes of odds/broadcast data).
    On any failure it returns stale cache (if any) and flips the warning banner. */
-async function api(endpoint, params, ttlMs){
-  const key = "api:" + endpoint + ":" + new URLSearchParams(params).toString();
+async function api(endpoint, params, ttlMs, transform){
+  const key = "api2:" + endpoint + ":" + new URLSearchParams(params).toString();
   const cached = LS.get(key, null);
   const now = Date.now();
   if (cached && (ttlMs === Infinity || now - cached.t < ttlMs)) return cached.v;
@@ -536,8 +569,9 @@ async function api(endpoint, params, ttlMs){
     const json = await res.json();
     if (json.error) throw new Error(json.error);
     if (json.errors && !Array.isArray(json.errors) && Object.keys(json.errors).length) throw new Error(JSON.stringify(json.errors));
-    LS.set(key, { t: now, v: json });
-    return json;
+    const value = transform ? transform(json) : json;
+    LS.set(key, { t: now, v: value });
+    return value;
   } catch (e) {
     console.warn("API degraded:", endpoint, e.message);
     state.degraded = true;
@@ -625,8 +659,11 @@ function inLiveWindow(){
 /* Per-team match statistics (cards/saves) for a finished fixture, read from
    the cached ESPN match summary. Returns null fields when ESPN doesn't supply
    a stat, so we never award "clean game" or saves on missing data. */
+const statsMemo = new Map(); // stats are immutable once fetched — parse them once
 function statsFor(fxId, teamApiId){
-  const cached = LS.get("api:summary:" + new URLSearchParams({ event: fxId }).toString(), null);
+  const mk = fxId + ":" + teamApiId;
+  if (statsMemo.has(mk)) return statsMemo.get(mk);
+  const cached = LS.get("api2:summary:" + new URLSearchParams({ event: fxId }).toString(), null);
   const box = cached && cached.v && cached.v.boxscore && cached.v.boxscore.teams;
   if (!box) return null;
   const side = box.find((t) => Number(t.team && t.team.id) === teamApiId);
@@ -636,11 +673,13 @@ function statsFor(fxId, teamApiId){
     return row ? (Number(row.displayValue != null ? row.displayValue : row.value) || 0) : null;
   };
   const yellow = stat(/yellow/i), red = stat(/red/i), saves = stat(/save/i);
-  return {
+  const res = {
     yellow, red, saves,
     hasCards: yellow != null && red != null,
     hasSaves: saves != null
   };
+  statsMemo.set(mk, res);
+  return res;
 }
 
 /* ============================================================
@@ -718,6 +757,42 @@ function harvestGroups(node){
     }
     if (node.children) harvestGroups(node.children);
   } catch (e) { /* standings shape changed — groups just show "–" */ }
+}
+
+/* ---- Slimmers: shrink ESPN payloads (odds, broadcasts, logos, links — often
+   megabytes) down to the few KB we use, BEFORE caching to localStorage.
+   Synchronous multi-MB localStorage writes were a major source of jank. ---- */
+function slimScoreboard(sb){
+  captureCalendar(sb);
+  const fixtures = [];
+  for (const ev of (sb.events || [])){
+    const fx = adaptEspn(ev);
+    if (fx) fixtures.push(fx);
+  }
+  return {
+    stageWindows: stageWindows.map((w) => ({ start: +w.start, end: +w.end, label: w.label })),
+    fixtures
+  };
+}
+function slimSummary(j){
+  const teams = [];
+  try {
+    for (const t of (j.boxscore.teams || [])){
+      teams.push({
+        team: { id: t.team.id },
+        statistics: (t.statistics || []).map((s) => ({
+          name: s.name || s.label || "",
+          displayValue: s.displayValue != null ? s.displayValue : s.value
+        }))
+      });
+    }
+  } catch (e) { /* no boxscore — stats stay unknown */ }
+  return { boxscore: { teams } };
+}
+function slimStandings(j){
+  state.groups = {};
+  harvestGroups(j.children || j);
+  return { groups: state.groups };
 }
 
 function adaptEspn(ev){
@@ -959,7 +1034,8 @@ function tickerItems(){
 }
 
 function renderTicker(){
-  const items = tickerItems();
+  // Cap items so the scrolling layer stays small on phones.
+  const items = tickerItems().slice(0, 12);
   const hash = items.join("|");
   if (hash === state.tickerHash) return;      // don't restart the animation needlessly
   state.tickerHash = hash;
@@ -1210,14 +1286,25 @@ function renderStats(){
     card("🥄", "WOODEN SPOON WATCH", spoon, spoon.total + " pts — buy the pints");
 }
 
-function renderAll(){
-  renderHeader();
-  renderTicker();
-  renderSpotlight();
-  renderGrid();
-  renderLeaderboard();
-  renderFixtures();
-  renderStats();
+/* Heavy DOM rebuilds only happen when something actually changed — polling a
+   quiet schedule no longer touches the DOM, which keeps scrolling rock-steady. */
+let lastRenderHash = "";
+function renderAll(force){
+  renderHeader();      // cheap text updates
+  renderTicker();      // has its own change-guard
+  renderSpotlight();   // tiny panel
+  const hash = JSON.stringify([
+    state.model.participants.map((r) => [r.p.name, r.total, r.liveCount, r.aliveCount]),
+    allFixtures().map((fx) => [fx.fixture.id, fxStatus(fx), fx.goals.home, fx.goals.away, fx.fixture.status.elapsed]),
+    state.groups
+  ]);
+  if (force || hash !== lastRenderHash){
+    lastRenderHash = hash;
+    renderGrid();
+    renderLeaderboard();
+    renderFixtures();
+    renderStats();
+  }
 }
 
 /* ============================================================
@@ -1235,9 +1322,11 @@ function showToast(html, cls){
 
 function fireConfetti(){
   if (reducedMotion || typeof confetti !== "function") return;
-  confetti({ particleCount: 160, spread: 75, origin: { y: 0.7 } });
-  setTimeout(() => confetti({ particleCount: 90, angle: 60, spread: 60, origin: { x: 0 } }), 250);
-  setTimeout(() => confetti({ particleCount: 90, angle: 120, spread: 60, origin: { x: 1 } }), 400);
+  // Fewer particles on phones — same party, less GPU strain.
+  const k = window.innerWidth < 640 ? 0.55 : 1;
+  confetti({ particleCount: Math.round(160 * k), spread: 75, origin: { y: 0.7 } });
+  setTimeout(() => confetti({ particleCount: Math.round(90 * k), angle: 60, spread: 60, origin: { x: 0 } }), 250);
+  setTimeout(() => confetti({ particleCount: Math.round(90 * k), angle: 120, spread: 60, origin: { x: 1 } }), 400);
 }
 
 function showGoalOverlay(caption){
@@ -1324,13 +1413,12 @@ async function refresh(){
   //    AND in-play events. Cached 55s during live windows, 10 min otherwise.
   const sb = await api("scoreboard",
     { dates: espnDates(), limit: "300" },
-    inLiveWindow() ? CONFIG.liveTtlMs : CONFIG.scheduleTtlMs);
+    inLiveWindow() ? CONFIG.liveTtlMs : CONFIG.scheduleTtlMs,
+    slimScoreboard);
   if (sb){
-    captureCalendar(sb);
-    for (const ev of (sb.events || [])){
-      const fx = adaptEspn(ev);
-      if (fx) state.fixtures.set(fx.fixture.id, fx);
-    }
+    if (sb.stageWindows) stageWindows = sb.stageWindows.map((w) =>
+      ({ start: new Date(w.start), end: new Date(w.end), label: w.label }));
+    for (const fx of (sb.fixtures || [])) state.fixtures.set(fx.fixture.id, fx);
   }
 
   // 2) Match summaries (cards + saves where ESPN provides them) for finished
@@ -1340,16 +1428,16 @@ async function refresh(){
     if (newStats >= CONFIG.maxSummaryFetchPerCycle) break;
     if (!isDoneFx(fx)) continue;
     if (!(matchTeam(fx.teams.home) || matchTeam(fx.teams.away))) continue;
-    const key = "api:summary:" + new URLSearchParams({ event: fx.fixture.id }).toString();
+    const key = "api2:summary:" + new URLSearchParams({ event: fx.fixture.id }).toString();
     if (LS.get(key, null)) continue;
     const before = networkCallsThisCycle;
-    await api("summary", { event: fx.fixture.id }, Infinity);
+    await api("summary", { event: fx.fixture.id }, Infinity, slimSummary);
     if (networkCallsThisCycle > before) newStats++;
   }
 
   // 3) Group letters from standings (tolerant of ESPN's nesting; 6-hourly).
-  const standings = await api("standings", { season: "2026" }, CONFIG.standingsTtlMs);
-  if (standings) harvestGroups(standings.children || standings);
+  const standings = await api("standings", { season: "2026" }, CONFIG.standingsTtlMs, slimStandings);
+  if (standings && standings.groups) Object.assign(state.groups, standings.groups);
 
   state.lastUpdated = new Date();
   computeModel();
@@ -1376,7 +1464,7 @@ document.addEventListener("visibilitychange", () => {
 function saveOverrides(){
   LS.set("overrides", state.overrides);
   computeModel();
-  renderAll();
+  renderAll(true);
   renderAdmin();
 }
 
