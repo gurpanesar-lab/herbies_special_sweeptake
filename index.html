@@ -28,6 +28,9 @@
   --radius:14px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+/* CRITICAL: elements with explicit display (flex etc.) must still respect [hidden] —
+   without this, the goal overlay invisibly covers the page and blocks all clicks. */
+[hidden]{display:none!important}
 html{scroll-behavior:smooth}
 button,.tab,.lb-row{touch-action:manipulation}
 body{
@@ -46,7 +49,11 @@ body::before{
     repeating-linear-gradient(90deg,rgba(255,255,255,.025) 0 90px,transparent 90px 180px);
 }
 main{max-width:1180px;margin:0 auto;padding:0 14px 60px}
-h2{font-family:var(--display);font-size:1.15rem;letter-spacing:.04em;margin-bottom:14px;color:var(--txt)}
+h2{
+  font-family:var(--display);font-size:1.15rem;letter-spacing:.04em;margin-bottom:14px;color:var(--txt);
+  display:flex;align-items:center;gap:10px;
+}
+h2::after{content:"";flex:1;height:2px;border-radius:2px;background:linear-gradient(90deg,var(--line-strong),transparent)}
 button{font-family:inherit;cursor:pointer}
 .scoreboard{font-family:var(--display);font-variant-numeric:tabular-nums;letter-spacing:.06em}
 
@@ -62,7 +69,7 @@ button{font-family:inherit;cursor:pointer}
 .host-flags{font-size:1.2rem;letter-spacing:.18em;display:block;margin-bottom:4px}
 .hdr h1{
   font-family:var(--display);font-size:clamp(1.45rem,4.5vw,2.4rem);line-height:1.08;
-  background:linear-gradient(92deg,#fff 30%,var(--gold) 70%,#f59e0b);
+  background:linear-gradient(92deg,#fff 22%,var(--gold) 58%,#ff9f43 90%);
   -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
 }
 .hdr-meta{text-align:right;font-size:.8rem;color:var(--muted)}
@@ -125,9 +132,12 @@ button{font-family:inherit;cursor:pointer}
 .card{
   position:relative;
   background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,0) 38%),var(--panel-solid);
-  border:1px solid var(--line);border-radius:var(--radius);
+  border:1px solid var(--line);border-top:3px solid var(--oc,var(--line));
+  border-radius:var(--radius);
   transition:transform .22s,border-color .22s;
 }
+.card-head{cursor:pointer}
+.team-row{cursor:pointer}
 /* Hover effects only on devices that actually hover — avoids sticky states on touch. */
 @media (hover:hover){
   .card:hover{transform:translateY(-3px)}
@@ -286,6 +296,42 @@ button{font-family:inherit;cursor:pointer}
 .adm-elim label{display:flex;align-items:center;gap:6px;padding:2px 0;color:var(--muted)}
 .adm-close{position:absolute;top:12px;right:14px;background:none;border:0;color:var(--muted);font-size:1.4rem}
 
+/* ============ Detail modal (players & teams) ============ */
+#modal{
+  position:fixed;inset:0;z-index:88;display:flex;align-items:flex-end;justify-content:center;
+  background:rgba(0,0,0,.6);
+}
+.modal-box{
+  background:#0d4a30;border:1px solid var(--line-strong);border-radius:18px 18px 0 0;
+  max-width:560px;width:100%;max-height:84vh;overflow-y:auto;padding:18px;position:relative;
+  animation:modalIn .25s ease-out;
+}
+@keyframes modalIn{from{transform:translateY(40px);opacity:0}}
+@media (min-width:641px){
+  #modal{align-items:center;padding:20px}
+  .modal-box{border-radius:18px}
+}
+.modal-close{
+  position:absolute;top:8px;right:12px;background:none;border:0;color:var(--muted);
+  font-size:1.7rem;line-height:1;cursor:pointer;padding:6px;
+}
+.m-head{display:flex;align-items:center;gap:12px;padding-right:30px}
+.m-title{font-family:var(--display);font-size:1.2rem}
+.m-sub{font-size:.78rem;color:var(--muted);margin-top:3px}
+.m-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:8px;margin:14px 0}
+.m-stat{background:rgba(255,255,255,.08);border-radius:10px;padding:9px 6px;text-align:center}
+.m-stat b{display:block;font-family:var(--display);font-size:1.05rem;color:var(--gold)}
+.m-stat span{font-size:.64rem;color:var(--muted);letter-spacing:.07em}
+.m-sec{font-family:var(--display);font-size:.72rem;color:var(--accent);letter-spacing:.12em;margin:16px 0 6px}
+.m-row{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:6px 0;font-size:.85rem;color:var(--muted);border-bottom:1px dashed rgba(255,255,255,.1);
+}
+.m-row b{color:var(--txt);font-weight:600}
+.m-pts{font-family:var(--display);color:var(--accent);flex:none}
+.m-click{cursor:pointer}
+@media (hover:hover){ .m-click:hover b{color:var(--gold)} }
+
 footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;font-size:.72rem;color:var(--dim);text-align:center}
 
 /* ============ Mobile ============ */
@@ -358,7 +404,8 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;font-size:.72rem;color
   <section class="panel">
     <h2>🏆 Leaderboard</h2>
     <div id="leaderboard"></div>
-    <div class="lb-hint">Tap a row to see exactly where the points came from.</div>
+    <div class="lb-hint">Tap a row for the points breakdown — or tap any player/team card above for full stats.</div>
+    <button class="btn ghost" id="rulesBtn" style="margin-top:10px">📜 Scoring rules</button>
   </section>
 
   <section class="panel">
@@ -382,6 +429,8 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;font-size:.72rem;color
   All kick-off times shown in UK time (Europe/London). Data via ESPN's public scoreboard feed.
   <span id="footerAdminHint"></span>
 </footer>
+
+<div id="modal" hidden><div class="modal-box" id="modalBox"></div></div>
 
 <div id="toasts" aria-live="polite"></div>
 <div id="gifOverlay" hidden></div>
@@ -1071,13 +1120,13 @@ function renderSpotlight(){
   $("#spotSlide").innerHTML = `
     <div class="spot-tag">${live ? '<span class="live-dot">🔴</span> LIVE NOW' : "🔥 DERBY DAY"}</div>
     <div class="spot-teams">
-      <div class="spot-side">
+      <div class="spot-side" data-team="${esc(h.name)}" style="cursor:pointer">
         <span class="spot-flag">${esc(h.flag)}</span>
         <div class="spot-team">${esc(fx.teams.home.name)}</div>
         ${ownerChip(h.owner)}
       </div>
       <div class="spot-score scoreboard">${live || isDoneFx(fx) ? `${fx.goals.home ?? 0} – ${fx.goals.away ?? 0}` : "v"}</div>
-      <div class="spot-side">
+      <div class="spot-side" data-team="${esc(a.name)}" style="cursor:pointer">
         <span class="spot-flag">${esc(a.flag)}</span>
         <div class="spot-team">${esc(fx.teams.away.name)}</div>
         ${ownerChip(a.owner)}
@@ -1128,14 +1177,14 @@ function renderGrid(){
     const p = row.p;
     const live = row.liveCount > 0;
     return `
-    <div class="card${live ? " live" : ""}" data-name="${esc(p.name)}">
-      <div class="card-head">
+    <div class="card${live ? " live" : ""}" data-name="${esc(p.name)}" style="--oc:${esc(p.color)}">
+      <div class="card-head" title="Tap for ${esc(p.name)}'s full stats">
         <span class="avatar" style="background:${esc(p.color)}">${esc(initials(p.name))}</span>
         <span class="card-name">${esc(p.name)}<div class="card-rank">#${i + 1} · ${row.aliveCount}/6 teams alive</div></span>
         <span class="card-pts" data-countup="${row.total}">${row.total}</span>
       </div>
       ${row.teams.map((ts) => `
-        <div class="team-row${ts.eliminated ? " out" : ""}">
+        <div class="team-row${ts.eliminated ? " out" : ""}" data-team="${esc(ts.team.name)}">
           <span class="t-flag">${esc(ts.team.flag)}</span>
           <span class="t-name">${esc(ts.team.name)}</span>
           <span class="t-grp">${esc(groupOf(ts.team))}</span>
@@ -1224,9 +1273,9 @@ function fxRow(fx){
     : `<span class="fx-time">${esc(fmtTime(kickoff(fx)))}</span><span class="fx-st">${esc(fmtDay(kickoff(fx)))}</span>`;
   return `
   <div class="fx-row">
-    <div class="fx-team"><span>${h ? esc(h.flag) : "🏳️"}</span><span class="nm">${esc(fx.teams.home.name)}</span>${h ? ownerChip(h.owner) : ""}</div>
+    <div class="fx-team"${h ? ` data-team="${esc(h.name)}" style="cursor:pointer"` : ""}><span>${h ? esc(h.flag) : "🏳️"}</span><span class="nm">${esc(fx.teams.home.name)}</span>${h ? ownerChip(h.owner) : ""}</div>
     <div class="fx-mid">${mid}</div>
-    <div class="fx-team away">${a ? ownerChip(a.owner) : ""}<span class="nm">${esc(fx.teams.away.name)}</span><span>${a ? esc(a.flag) : "🏳️"}</span></div>
+    <div class="fx-team away"${a ? ` data-team="${esc(a.name)}" style="cursor:pointer"` : ""}>${a ? ownerChip(a.owner) : ""}<span class="nm">${esc(fx.teams.away.name)}</span><span>${a ? esc(a.flag) : "🏳️"}</span></div>
     <span class="fx-fire">${fire ? "🔥" : ""}</span>
   </div>`;
 }
@@ -1306,6 +1355,150 @@ function renderAll(force){
     renderStats();
   }
 }
+
+/* ============================================================
+   9b. DETAIL MODALS — tap a player or a team for full stats
+   ============================================================ */
+function openModal(html){
+  $("#modalBox").innerHTML = html;
+  $("#modal").hidden = false;
+  document.body.style.overflow = "hidden";
+}
+function closeModal(){
+  $("#modal").hidden = true;
+  document.body.style.overflow = "";
+}
+$("#modal").addEventListener("click", (e) => {
+  if (e.target.id === "modal" || e.target.closest(".modal-close")) closeModal();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+
+function statBox(v, label){
+  return `<div class="m-stat"><b>${v}</b><span>${label}</span></div>`;
+}
+
+/* ---------- Player detail ---------- */
+function showPlayer(name){
+  const P = state.model.participants;
+  const row = P.find((r) => r.p.name === name);
+  if (!row) return;
+  const rank = P.indexOf(row) + 1;
+  openModal(`
+    <button class="modal-close" aria-label="Close">×</button>
+    <div class="m-head">
+      <span class="avatar" style="background:${esc(row.p.color)}">${esc(initials(name))}</span>
+      <div>
+        <div class="m-title">${esc(name)}</div>
+        <div class="m-sub">${["🥇","🥈","🥉"][rank-1] || "#" + rank} on the leaderboard</div>
+      </div>
+    </div>
+    <div class="m-stats">
+      ${statBox(row.total, "POINTS")}
+      ${statBox(row.goals, "GOALS")}
+      ${statBox(row.cards, "CARDS")}
+      ${statBox(row.saves, "SAVES")}
+      ${statBox(row.aliveCount + "/6", "ALIVE")}
+    </div>
+    <div class="m-sec">TEAMS — TAP ONE FOR MATCH-BY-MATCH DETAIL</div>
+    ${row.teams.map((ts) => `
+      <div class="m-row m-click" data-team="${esc(ts.team.name)}">
+        <b>${esc(ts.team.flag)} ${esc(ts.team.name)}${ts.eliminated ? " ☠️" : ""}</b>
+        <span>${teamStatus(ts)}</span>
+        <span class="m-pts">${ts.points}</span>
+      </div>`).join("")}
+    ${row.adjustments.length ? `<div class="m-sec">MANUAL ADJUSTMENTS</div>` +
+      row.adjustments.map((a) => `
+        <div class="m-row">
+          <b>🛠 ${esc(a.reason || "Adjustment")}</b>
+          <span class="m-pts">${a.points > 0 ? "+" : ""}${esc(String(a.points))}</span>
+        </div>`).join("") : ""}
+  `);
+}
+
+/* ---------- Team detail ---------- */
+function showTeam(teamName){
+  const ts = state.model.teams.get(teamName);
+  if (!ts) return;
+  const t = ts.team;
+  const fxs = allFixtures()
+    .filter((fx) => matchTeam(fx.teams.home) === t || matchTeam(fx.teams.away) === t)
+    .sort((a, b) => kickoff(a) - kickoff(b));
+  let w = 0, d = 0, l = 0;
+  const matchRows = fxs.map((fx) => {
+    const home = matchTeam(fx.teams.home) === t;
+    const opp = home ? fx.teams.away.name : fx.teams.home.name;
+    const gf = home ? fx.goals.home : fx.goals.away;
+    const ga = home ? fx.goals.away : fx.goals.home;
+    let line;
+    if (isDoneFx(fx)){
+      const st = fxStatus(fx);
+      const pens = (fx.score && fx.score.penalty) || {};
+      const pf = home ? pens.home : pens.away, pa = home ? pens.away : pens.home;
+      if (st === "PEN"){
+        d++;
+        line = `${(pf||0) > (pa||0) ? "🎯" : "❌"} ${gf}-${ga} (${pf}-${pa} pens) v ${opp}`;
+      } else if (gf > ga){ w++; line = `✅ Won ${gf}-${ga} v ${opp}`; }
+      else if (gf < ga){ l++; line = `❌ Lost ${gf}-${ga} v ${opp}`; }
+      else { d++; line = `🤝 Drew ${gf}-${ga} v ${opp}`; }
+      line += ` · ${fmtDay(kickoff(fx))}`;
+    } else if (isLiveFx(fx)){
+      line = `🔴 LIVE ${gf ?? 0}-${ga ?? 0} v ${opp}`;
+    } else {
+      line = `📅 v ${opp} · ${fmtDayTime(kickoff(fx))}`;
+    }
+    return `<div class="m-row"><b>${esc(line)}</b><span>${esc(fx.league.round || "")}</span></div>`;
+  }).join("");
+  openModal(`
+    <button class="modal-close" aria-label="Close">×</button>
+    <div class="m-head">
+      <span style="font-size:2.1rem">${esc(t.flag)}</span>
+      <div>
+        <div class="m-title">${esc(t.name)}${ts.eliminated ? ' <span style="color:var(--danger);font-size:.75rem">ELIMINATED</span>' : ""}</div>
+        <div class="m-sub">${ownerChip(t.owner)} &nbsp;·&nbsp; Group ${esc(groupOf(t))}</div>
+      </div>
+    </div>
+    <div class="m-stats">
+      ${statBox(ts.points, "POINTS")}
+      ${statBox(w + "-" + d + "-" + l, "W-D-L")}
+      ${statBox(ts.gf + "–" + ts.ga, "GF–GA")}
+      ${statBox(ts.cards, "CARDS")}
+      ${statBox(ts.saves, "SAVES")}
+    </div>
+    <div class="m-sec">MATCHES</div>
+    ${matchRows || '<div class="m-row"><b>No matches scheduled yet</b></div>'}
+    <div class="m-sec">POINTS BREAKDOWN</div>
+    ${ts.breakdown.length
+      ? ts.breakdown.map((b) => `<div class="m-row"><b>${esc(b.label)}</b><span class="m-pts">${b.pts > 0 ? "+" : ""}${b.pts}</span></div>`).join("")
+      : '<div class="m-row"><b>No points yet — patience</b></div>'}
+  `);
+}
+
+/* ---------- Scoring rules ---------- */
+const RULE_LABELS = {
+  goal: "⚽ Goal scored by your team", win: "✅ Win", draw: "🤝 Draw",
+  cleanSheet: "🧱 Clean sheet", cleanGame: "😇 No cards for your team",
+  savePoint: "🧤 Per goalkeeper save", shootoutWin: "🎯 Penalty shootout win",
+  redCard: "🟥 Red card against your team", reachKnockouts: "🚪 Reach the knockouts",
+  reachQuarterFinal: "🎯 Reach the quarter-finals", reachSemiFinal: "🔥 Reach the semi-finals",
+  reachFinal: "🏟 Reach the final", winTournament: "🏆 Win the World Cup"
+};
+$("#rulesBtn").addEventListener("click", () => {
+  openModal(`
+    <button class="modal-close" aria-label="Close">×</button>
+    <div class="m-title" style="margin-bottom:12px">📜 Scoring rules</div>
+    ${Object.keys(RULE_LABELS).map((k) =>
+      `<div class="m-row"><b>${RULE_LABELS[k]}</b><span class="m-pts">${SCORING[k] > 0 ? "+" : ""}${SCORING[k]}</span></div>`).join("")}
+  `);
+});
+
+/* ---------- Click-through wiring (event delegation) ---------- */
+document.addEventListener("click", (e) => {
+  if (e.target.closest("#adminPanel")) return;          // admin has its own handlers
+  const teamEl = e.target.closest("[data-team]");
+  if (teamEl){ showTeam(teamEl.dataset.team); return; }
+  const head = e.target.closest(".card-head");
+  if (head) showPlayer(head.closest(".card").dataset.name);
+});
 
 /* ============================================================
    10. CELEBRATIONS — confetti, GIFs, toasts, red flashes
