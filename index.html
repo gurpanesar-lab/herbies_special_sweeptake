@@ -256,6 +256,22 @@ button{font-family:inherit;cursor:pointer}
 .stat-who{font-weight:700;font-size:1.02rem}
 .stat-val{font-size:.8rem;color:var(--accent);margin-top:2px}
 
+/* ============ Group tables ============ */
+.tables-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.gt-title{font-family:var(--display);font-size:.72rem;letter-spacing:.14em;color:var(--hot);margin-bottom:6px}
+.gt-table{width:100%;border-collapse:collapse;font-size:.78rem}
+.gt-table th{
+  font-family:var(--display);font-size:.58rem;letter-spacing:.08em;color:var(--dim);
+  text-align:right;padding:3px 5px;border-bottom:1px solid var(--line);
+}
+.gt-table th.gt-nm,.gt-table td.gt-nm{text-align:left;width:99%}
+.gt-table td{padding:5px;text-align:right;border-bottom:1px solid rgba(255,255,255,.06);color:var(--muted);white-space:nowrap}
+.gt-table td.gt-nm{color:var(--txt);overflow:hidden;max-width:0;text-overflow:ellipsis;white-space:nowrap}
+.gt-owner{font-size:.62rem;font-weight:700}
+.gt-pts{font-family:var(--display);color:var(--gold)}
+.gt-q td:first-child{box-shadow:inset 3px 0 0 var(--accent)}   /* top two — through */
+.gt-m td:first-child{box-shadow:inset 3px 0 0 var(--hot)}      /* third — maybe */
+
 /* ============ Toasts ============ */
 #toasts{position:fixed;top:14px;right:14px;z-index:90;display:flex;flex-direction:column;gap:8px;max-width:min(360px,calc(100vw - 28px))}
 .toast{
@@ -449,6 +465,12 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;font-size:.72rem;color
     <div class="stats-grid" id="statsCorner"></div>
   </section>
 
+  <section class="panel" id="tablesPanel" hidden>
+    <h2>🌍 Group Tables</h2>
+    <div class="tables-grid" id="tables"></div>
+    <div class="lb-hint">Top two qualify automatically; the eight best third-placed teams also go through.</div>
+  </section>
+
 </main>
 
 <footer>
@@ -598,6 +620,7 @@ const state = {
   teamIdMap: LS.get("teamIds", {}),   // API team id -> team name (learned at runtime)
   fixtures: new Map(),     // fixture id -> API fixture object (live ones carry .events)
   groups: {},              // norm(team name) -> group letter
+  tables: {},              // group letter -> real WC standings rows
   overrides: LS.get("overrides", { pointAdjustments: [], tickerMessages: [], eliminated: [] }),
   repoOverrides: null,     // optional data/overrides.json committed to the repo
   degraded: false,
@@ -820,7 +843,7 @@ function adaptEvents(comp, homeT, awayT){
   return out;
 }
 
-/* Walk ESPN's standings tree and harvest "Group A"… letters per team. */
+/* Walk ESPN's standings tree and harvest each group's letter AND full table. */
 function harvestGroups(node){
   try {
     if (!node || typeof node !== "object") return;
@@ -828,13 +851,27 @@ function harvestGroups(node){
     if (node.name && /group\s+[a-l]\b/i.test(node.name)){
       const letter = node.name.replace(/.*group\s*/i, "").trim().slice(0, 1).toUpperCase();
       const entries = (node.standings && node.standings.entries) || [];
+      const rows = [];
       for (const e of entries){
         const nm = e.team && (e.team.displayName || e.team.name);
-        if (nm) state.groups[norm(nm)] = letter;
+        if (!nm) continue;
+        state.groups[norm(nm)] = letter;
+        const stat = (re, fb) => {
+          const s = (e.stats || []).find((x) => re.test(x.name || x.abbreviation || ""));
+          return s ? (Number(s.value != null ? s.value : s.displayValue) || 0) : (fb || 0);
+        };
+        rows.push({
+          name: nm,
+          p: stat(/gamesplayed/i), w: stat(/^wins$/i), d: stat(/^ties$/i), l: stat(/^losses$/i),
+          gf: stat(/pointsfor|goalsfor/i), ga: stat(/pointsagainst|goalsagainst/i),
+          gd: stat(/pointdifferential|goaldiff/i), pts: stat(/^points$/i), rank: stat(/^rank$/i, 99)
+        });
       }
+      rows.sort((a, b) => (a.rank - b.rank) || (b.pts - a.pts) || (b.gd - a.gd) || (b.gf - a.gf));
+      state.tables[letter] = rows;
     }
     if (node.children) harvestGroups(node.children);
-  } catch (e) { /* standings shape changed — groups just show "–" */ }
+  } catch (e) { /* standings shape changed — tables just stay hidden */ }
 }
 
 /* ---- Slimmers: shrink ESPN payloads (odds, broadcasts, logos, links — often
@@ -869,8 +906,9 @@ function slimSummary(j){
 }
 function slimStandings(j){
   state.groups = {};
+  state.tables = {};
   harvestGroups(j.children || j);
-  return { groups: state.groups };
+  return { groups: state.groups, tables: state.tables };
 }
 
 function adaptEspn(ev){
@@ -1417,6 +1455,31 @@ function renderBracket(){
     </div>`).join("");
 }
 
+/* ---------- Real World Cup group tables ---------- */
+function renderTables(){
+  const letters = Object.keys(state.tables).sort();
+  $("#tablesPanel").hidden = !letters.length;
+  if (!letters.length) return;
+  $("#tables").innerHTML = letters.map((L) => `
+    <div>
+      <div class="gt-title">GROUP ${esc(L)}</div>
+      <table class="gt-table">
+        <thead><tr><th>#</th><th class="gt-nm">TEAM</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>PTS</th></tr></thead>
+        <tbody>
+          ${state.tables[L].map((r, i) => {
+            const t = state.teamByKey.get(norm(r.name));
+            return `<tr class="${i < 2 ? "gt-q" : i === 2 ? "gt-m" : ""}"${t ? ` data-team="${esc(t.name)}" style="cursor:pointer"` : ""}>
+              <td>${i + 1}</td>
+              <td class="gt-nm">${t ? esc(t.flag) + " " : ""}${esc(r.name)}${t ? ` <span class="gt-owner" style="color:${esc(t.owner.color)}">${esc(t.owner.name)}</span>` : ""}</td>
+              <td>${r.p}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td>
+              <td>${r.gd > 0 ? "+" : ""}${r.gd}</td><td class="gt-pts">${r.pts}</td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>`).join("");
+}
+
 /* ---------- Stats corner ---------- */
 function renderStats(){
   const P = state.model.participants;
@@ -1448,7 +1511,7 @@ function renderAll(force){
   const hash = JSON.stringify([
     state.model.participants.map((r) => [r.p.name, r.total, r.liveCount, r.aliveCount]),
     allFixtures().map((fx) => [fx.fixture.id, fxStatus(fx), fx.goals.home, fx.goals.away, fx.fixture.status.elapsed]),
-    state.groups
+    state.groups, state.tables
   ]);
   if (force || hash !== lastRenderHash){
     lastRenderHash = hash;
@@ -1457,6 +1520,7 @@ function renderAll(force){
     renderFixtures();
     renderBracket();
     renderStats();
+    renderTables();
   }
 }
 
@@ -1734,9 +1798,14 @@ async function refresh(){
     if (networkCallsThisCycle > before) newStats++;
   }
 
-  // 3) Group letters from standings (tolerant of ESPN's nesting; 6-hourly).
-  const standings = await api("standings", { season: "2026" }, CONFIG.standingsTtlMs, slimStandings);
-  if (standings && standings.groups) Object.assign(state.groups, standings.groups);
+  // 3) Group letters + real group tables from standings. Refreshed faster
+  //    during live windows so the tables track the action.
+  const standings = await api("standings", { season: "2026", v: "2" },
+    inLiveWindow() ? CONFIG.scheduleTtlMs : CONFIG.standingsTtlMs, slimStandings);
+  if (standings){
+    if (standings.groups) Object.assign(state.groups, standings.groups);
+    if (standings.tables && Object.keys(standings.tables).length) state.tables = standings.tables;
+  }
 
   state.lastUpdated = new Date();
   computeModel();
