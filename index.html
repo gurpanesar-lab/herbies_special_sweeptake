@@ -1456,8 +1456,52 @@ function renderBracket(){
 }
 
 /* ---------- Real World Cup group tables ---------- */
+/* Computed LIVE from the fixtures we already poll every 30s — so the tables
+   move with every goal instead of waiting on ESPN's slow standings endpoint.
+   (Standings are only used for group membership, and as a fallback.)
+   Tiebreakers: points → goal difference → goals scored (FIFA's head-to-head
+   step isn't applied; correct the rare edge case via the admin panel). */
+function computeTables(){
+  const acc = {}; // letter -> { normName -> row }
+  for (const fx of allFixtures()){
+    if (stageOf(fx.league.round)) continue;                 // group stage only
+    for (const side of ["home", "away"]){
+      const apiT = fx.teams[side];
+      const letter = state.groups[norm(apiT.name)];
+      if (!letter) continue;
+      const tbl = acc[letter] || (acc[letter] = {});
+      const row = tbl[norm(apiT.name)] ||
+        (tbl[norm(apiT.name)] = { name: apiT.name, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 });
+      // Finished games count for real; live games count provisionally so the
+      // table moves with the match (it self-corrects at full-time).
+      if ((isDoneFx(fx) || isLiveFx(fx)) && fx.goals[side] != null){
+        const gf = fx.goals[side], ga = fx.goals[side === "home" ? "away" : "home"];
+        row.p++; row.gf += gf; row.ga += ga; row.gd = row.gf - row.ga;
+        if (gf > ga){ row.w++; row.pts += 3; }
+        else if (gf === ga){ row.d++; row.pts += 1; }
+        else row.l++;
+      }
+    }
+  }
+  const out = {};
+  for (const [L, tbl] of Object.entries(acc)) out[L] = Object.values(tbl);
+  // Teams whose fixtures are missing/postponed still get a zero row.
+  for (const [k, L] of Object.entries(state.groups)){
+    const t = state.teamByKey.get(k);
+    if (!t) continue;
+    const tbl = out[L] || (out[L] = []);
+    if (!tbl.some((r) => norm(r.name) === k))
+      tbl.push({ name: t.name, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 });
+  }
+  for (const L of Object.keys(out))
+    out[L].sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf || a.name.localeCompare(b.name));
+  return out;
+}
+
 function renderTables(){
-  const letters = Object.keys(state.tables).sort();
+  const computed = computeTables();
+  const tables = Object.keys(computed).length ? computed : state.tables;
+  const letters = Object.keys(tables).sort();
   $("#tablesPanel").hidden = !letters.length;
   if (!letters.length) return;
   $("#tables").innerHTML = letters.map((L) => `
@@ -1466,7 +1510,7 @@ function renderTables(){
       <table class="gt-table">
         <thead><tr><th>#</th><th class="gt-nm">TEAM</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>PTS</th></tr></thead>
         <tbody>
-          ${state.tables[L].map((r, i) => {
+          ${tables[L].map((r, i) => {
             const t = state.teamByKey.get(norm(r.name));
             return `<tr class="${i < 2 ? "gt-q" : i === 2 ? "gt-m" : ""}"${t ? ` data-team="${esc(t.name)}" style="cursor:pointer"` : ""}>
               <td>${i + 1}</td>
