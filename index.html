@@ -250,7 +250,13 @@ button{font-family:inherit;cursor:pointer}
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:12px}
 .stat-card{
   background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;
+  cursor:pointer;transition:transform .18s,border-color .18s;
 }
+@media (hover:hover){
+  .stat-card:hover{transform:translateY(-2px);border-color:var(--line-strong)}
+}
+.m-row.m-wrap{flex-wrap:wrap}
+.m-teams{flex:1 1 100%;font-size:.72rem;color:var(--dim);padding-left:4px}
 .stat-emoji{font-size:1.7rem}
 .stat-title{font-family:var(--display);font-size:.72rem;letter-spacing:.1em;color:var(--muted);margin:6px 0 4px}
 .stat-who{font-weight:700;font-size:1.02rem}
@@ -1531,18 +1537,49 @@ function renderStats(){
   const by = (key) => P.slice().sort((a, b) => b[key] - a[key])[0];
   const goals = by("goals"), cards = by("cards"), saves = by("saves");
   const spoon = P[P.length - 1];
-  const card = (emoji, title, row, val) => `
-    <div class="stat-card">
+  const card = (kind, emoji, title, row, val) => `
+    <div class="stat-card" data-stat="${kind}" title="Tap for the full ranking">
       <div class="stat-emoji">${emoji}</div>
       <div class="stat-title">${title}</div>
       <div class="stat-who">${ownerChip(row.p)}</div>
       <div class="stat-val">${val}</div>
     </div>`;
   $("#statsCorner").innerHTML =
-    card("👟", "GOLDEN BOOT GAFFER", goals, goals.goals + " goals scored") +
-    card("🟨", "DIRTIEST OWNER", cards, cards.cards + " cards collected") +
-    card("🧤", "WALL OF THE TOURNAMENT", saves, saves.saves + " saves") +
-    card("🥄", "WOODEN SPOON WATCH", spoon, spoon.total + " pts — buy the pints");
+    card("goals", "👟", "GOLDEN BOOT GAFFER", goals, goals.goals + " goals scored") +
+    card("cards", "🟨", "DIRTIEST OWNER", cards, cards.cards + " cards collected") +
+    card("saves", "🧤", "WALL OF THE TOURNAMENT", saves, saves.saves + " saves") +
+    card("spoon", "🥄", "WOODEN SPOON WATCH", spoon, spoon.total + " pts — buy the pints");
+}
+
+/* Full ranking behind each stats-corner card. */
+const STAT_DEFS = {
+  goals: { title: "👟 Golden Boot Gaffer", sub: "Total goals scored by each owner's teams", key: "goals", tkey: "gf", asc: false },
+  cards: { title: "🟨 Dirtiest Owner", sub: "Yellow + red cards collected", key: "cards", tkey: "cards", asc: false },
+  saves: { title: "🧤 Wall of the Tournament", sub: "Goalkeeper saves (from final match stats)", key: "saves", tkey: "saves", asc: false },
+  spoon: { title: "🥄 Wooden Spoon Watch", sub: "Lowest points — the pints are on them", key: "total", tkey: "points", asc: true }
+};
+function showStatRank(kind){
+  const def = STAT_DEFS[kind];
+  if (!def || !state.model) return;
+  const ranked = state.model.participants.slice()
+    .sort((a, b) => def.asc ? a[def.key] - b[def.key] : b[def.key] - a[def.key]);
+  openModal(`
+    <button class="modal-close" aria-label="Close">×</button>
+    <div class="m-title" style="margin-bottom:2px">${def.title}</div>
+    <div class="m-sub" style="margin-bottom:12px">${def.sub}</div>
+    ${ranked.map((row, i) => {
+      const parts = row.teams
+        .filter((ts) => ts[def.tkey])
+        .sort((a, b) => b[def.tkey] - a[def.tkey])
+        .slice(0, 4)
+        .map((ts) => `${esc(ts.team.flag)} ${esc(ts.team.name)} ${ts[def.tkey]}`)
+        .join(" · ");
+      return `<div class="m-row m-wrap">
+        <b>${i + 1}. ${ownerChip(row.p)}</b>
+        <span class="m-pts">${row[def.key]}</span>
+        ${parts ? `<span class="m-teams">${parts}</span>` : ""}
+      </div>`;
+    }).join("")}`);
 }
 
 /* Heavy DOM rebuilds only happen when something actually changed — polling a
@@ -1708,6 +1745,8 @@ $("#rulesBtn").addEventListener("click", () => {
 /* ---------- Click-through wiring (event delegation) ---------- */
 document.addEventListener("click", (e) => {
   if (e.target.closest("#adminPanel")) return;          // admin has its own handlers
+  const statEl = e.target.closest("[data-stat]");
+  if (statEl){ showStatRank(statEl.dataset.stat); return; }
   const teamEl = e.target.closest("[data-team]");
   if (teamEl){ showTeam(teamEl.dataset.team); return; }
   const head = e.target.closest(".card-head");
