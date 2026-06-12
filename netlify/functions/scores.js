@@ -22,8 +22,10 @@ const ENDPOINTS = {
 // Query params we forward upstream.
 const ALLOWED_PARAMS = new Set(["dates", "limit", "event", "season"]);
 
-// CDN cache lifetime per endpoint (seconds).
-const CACHE_SECONDS = { scoreboard: 55, summary: 3600, standings: 3600 };
+// CDN cache lifetime per endpoint (seconds). Scoreboard stays SHORT — it's the
+// live-scores path; long stale-while-revalidate here would delay goals by minutes.
+const CACHE_SECONDS = { scoreboard: 20, summary: 3600, standings: 600 };
+const SWR_SECONDS = { scoreboard: 30, summary: 600, standings: 300 };
 
 exports.handler = async (event) => {
   const headers = {
@@ -58,7 +60,7 @@ exports.handler = async (event) => {
       statusCode: res.status,
       headers: {
         ...headers,
-        "Cache-Control": `public, max-age=0, s-maxage=${CACHE_SECONDS[endpoint]}, stale-while-revalidate=600`,
+        "Cache-Control": `public, max-age=0, s-maxage=${CACHE_SECONDS[endpoint]}, stale-while-revalidate=${SWR_SECONDS[endpoint]}`,
       },
       body,
     };

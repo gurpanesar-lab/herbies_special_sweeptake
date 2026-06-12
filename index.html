@@ -548,9 +548,9 @@ const SCORING = {
 const CONFIG = {
   // Data source: ESPN's public scoreboard feed (free, no key) via the Netlify proxy.
   timezone: "Europe/London",   // ALL times shown in UK time
-  pollLiveMs: 60 * 1000,       // poll every 60s while a match is live
+  pollLiveMs: 30 * 1000,       // poll every 30s while a match is live (ESPN has no quota)
   pollIdleMs: 10 * 60 * 1000,  // every 10 min otherwise
-  liveTtlMs: 55 * 1000,        // scoreboard cache lifetime during live windows
+  liveTtlMs: 20 * 1000,        // scoreboard cache lifetime during live windows
   scheduleTtlMs: 10 * 60 * 1000,      // scoreboard cache lifetime otherwise
   standingsTtlMs: 6 * 60 * 60 * 1000, // group letters, 6-hourly
   dailyRequestBudget: 2000,    // safety net only — ESPN has no hard daily quota
@@ -1769,6 +1769,7 @@ function detectCelebrations(){
    11. REFRESH CYCLE + POLLING
    ============================================================ */
 async function refresh(){
+  try {
   state.degraded = false;
   networkCallsThisCycle = 0;
 
@@ -1811,7 +1812,12 @@ async function refresh(){
   computeModel();
   renderAll();
   detectCelebrations();
-  scheduleNextPoll();
+  } catch (e) {
+    console.warn("refresh failed:", e);
+    state.degraded = true;
+  } finally {
+    scheduleNextPoll(); // ALWAYS reschedule — one bad cycle must never stop polling
+  }
 }
 
 function scheduleNextPoll(){
