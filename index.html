@@ -503,8 +503,10 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;font-size:.72rem;color
    ============================================================ */
 const SCORING = {
   goal: 3,              // each goal scored by your team
+  goalConceded: -1,     // each goal conceded by your team
   win: 5,               // win (90 mins or extra time)
   draw: 2,              // draw (incl. knockout games decided on penalties)
+  loss: -2,             // losing a match
   cleanSheet: 4,        // no goals conceded
   cleanGame: 3,         // no yellow OR red cards for your team (needs match stats)
   savePoint: 1,         // per goalkeeper save (needs match stats)
@@ -932,11 +934,13 @@ function computeModel(){
       if (isLiveFx(fx)){
         ts.liveFx = fx;
         if (s.gf > 0) add(ts, s.gf * SCORING.goal, `⚽ ${s.gf} goal${s.gf>1?"s":""} vs ${oppName} (live)`);
+        if (s.ga > 0) add(ts, s.ga * SCORING.goalConceded, `🥅 Conceded ${s.ga} vs ${oppName} (live)`);
         ts.gf += s.gf || 0; ts.ga += s.ga || 0;
       } else if (FINISHED_STATUSES.has(st)){
         ts.played++; ts.lastFx = fx;
         ts.gf += s.gf || 0; ts.ga += s.ga || 0;
         if (s.gf > 0) add(ts, s.gf * SCORING.goal, `⚽ ${s.gf} goal${s.gf>1?"s":""} vs ${oppName}`);
+        if (s.ga > 0) add(ts, s.ga * SCORING.goalConceded, `🥅 Conceded ${s.ga} vs ${oppName}`);
 
         if (st === "PEN"){
           // Shootout: the match itself counts as a draw, winner gets the shootout bonus.
@@ -946,6 +950,8 @@ function computeModel(){
           add(ts, SCORING.win, `✅ Win vs ${oppName}`);
         } else if (s.gf === s.ga){
           add(ts, SCORING.draw, `🤝 Draw vs ${oppName}`);
+        } else {
+          add(ts, SCORING.loss, `❌ Loss vs ${oppName}`);
         }
         if ((s.ga || 0) === 0) add(ts, SCORING.cleanSheet, `🧱 Clean sheet vs ${oppName}`);
 
@@ -1573,7 +1579,8 @@ function showTeam(teamName){
 
 /* ---------- Scoring rules ---------- */
 const RULE_LABELS = {
-  goal: "⚽ Goal scored by your team", win: "✅ Win", draw: "🤝 Draw",
+  goal: "⚽ Goal scored by your team", goalConceded: "🥅 Goal conceded",
+  win: "✅ Win", draw: "🤝 Draw", loss: "❌ Loss",
   cleanSheet: "🧱 Clean sheet", cleanGame: "😇 No cards for your team",
   savePoint: "🧤 Per goalkeeper save", shootoutWin: "🎯 Penalty shootout win",
   redCard: "🟥 Red card against your team", yellowCard: "🟨 Yellow card against your team",
