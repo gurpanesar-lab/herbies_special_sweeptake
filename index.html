@@ -1069,6 +1069,7 @@ function computeModel(){
       p, teams, adjustments, total,
       goals: teams.reduce((s, t) => s + t.gf, 0),
       cards: teams.reduce((s, t) => s + t.cards, 0),
+      reds: teams.reduce((s, t) => s + t.reds, 0),
       saves: teams.reduce((s, t) => s + t.saves, 0),
       liveCount: teams.filter((t) => t.liveFx).length,
       aliveCount: teams.filter((t) => !t.eliminated).length
@@ -1546,7 +1547,7 @@ function renderStats(){
     </div>`;
   $("#statsCorner").innerHTML =
     card("goals", "👟", "GOLDEN BOOT GAFFER", goals, goals.goals + " goals scored") +
-    card("cards", "🟨", "DIRTIEST OWNER", cards, cards.cards + " cards collected") +
+    card("cards", "🟨", "DIRTIEST OWNER", cards, (cards.cards - cards.reds) + " 🟨 · " + cards.reds + " 🟥") +
     card("saves", "🧤", "WALL OF THE TOURNAMENT", saves, saves.saves + " saves") +
     card("spoon", "🥄", "WOODEN SPOON WATCH", spoon, spoon.total + " pts — buy the pints");
 }
@@ -1554,7 +1555,11 @@ function renderStats(){
 /* Full ranking behind each stats-corner card. */
 const STAT_DEFS = {
   goals: { title: "👟 Golden Boot Gaffer", sub: "Total goals scored by each owner's teams", key: "goals", tkey: "gf", asc: false },
-  cards: { title: "🟨 Dirtiest Owner", sub: "Yellow + red cards collected", key: "cards", tkey: "cards", asc: false },
+  cards: {
+    title: "🟨🟥 Dirtiest Owner", sub: "Yellow and red cards collected", key: "cards", tkey: "cards", asc: false,
+    fmt: (r) => `${r.cards - r.reds}🟨 ${r.reds}🟥`,
+    tfmt: (ts) => `${esc(ts.team.flag)} ${esc(ts.team.name)} ${ts.cards - ts.reds}🟨${ts.reds ? " " + ts.reds + "🟥" : ""}`
+  },
   saves: { title: "🧤 Wall of the Tournament", sub: "Goalkeeper saves (from final match stats)", key: "saves", tkey: "saves", asc: false },
   spoon: { title: "🥄 Wooden Spoon Watch", sub: "Lowest points — the pints are on them", key: "total", tkey: "points", asc: true }
 };
@@ -1572,11 +1577,11 @@ function showStatRank(kind){
         .filter((ts) => ts[def.tkey])
         .sort((a, b) => b[def.tkey] - a[def.tkey])
         .slice(0, 4)
-        .map((ts) => `${esc(ts.team.flag)} ${esc(ts.team.name)} ${ts[def.tkey]}`)
+        .map((ts) => def.tfmt ? def.tfmt(ts) : `${esc(ts.team.flag)} ${esc(ts.team.name)} ${ts[def.tkey]}`)
         .join(" · ");
       return `<div class="m-row m-wrap">
         <b>${i + 1}. ${ownerChip(row.p)}</b>
-        <span class="m-pts">${row[def.key]}</span>
+        <span class="m-pts">${def.fmt ? def.fmt(row) : row[def.key]}</span>
         ${parts ? `<span class="m-teams">${parts}</span>` : ""}
       </div>`;
     }).join("")}`);
@@ -1710,7 +1715,7 @@ function showTeam(teamName){
       ${statBox(ts.points, "POINTS")}
       ${statBox(w + "-" + d + "-" + l, "W-D-L")}
       ${statBox(ts.gf + "–" + ts.ga, "GF–GA")}
-      ${statBox(ts.cards, "CARDS")}
+      ${statBox((ts.cards - ts.reds) + "🟨 " + ts.reds + "🟥", "CARDS")}
       ${statBox(ts.saves, "SAVES")}
     </div>
     <div class="m-sec">MATCHES</div>
