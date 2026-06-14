@@ -102,6 +102,31 @@ button{font-family:inherit;cursor:pointer}
   padding:18px 16px;margin-bottom:22px;
 }
 
+/* ============ Live Now (top section) ============ */
+.live-dot{display:inline-block}
+.livenow{border-color:rgba(74,222,128,.42);box-shadow:0 0 28px rgba(74,222,128,.08)}
+.live-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.ln-card{
+  background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:12px;
+  padding:12px 13px;position:relative;
+}
+.ln-card.live{border-color:rgba(74,222,128,.55)}
+.ln-card.live::after{
+  content:"";position:absolute;inset:-1px;border-radius:12px;pointer-events:none;
+  box-shadow:0 0 18px rgba(74,222,128,.5);opacity:.25;animation:liveGlow 2.2s ease-in-out infinite;
+}
+.ln-tag{font-family:var(--display);font-size:.66rem;letter-spacing:.14em;color:var(--accent);margin-bottom:10px;text-align:center}
+.ln-card:not(.live) .ln-tag{color:var(--hot)}
+.ln-teams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.ln-side{min-width:0}
+.ln-flag{font-size:1.9rem;display:block}
+.ln-team{font-weight:700;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ln-side .owner-chip{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px}
+.ln-noowner{display:inline-block;font-size:.68rem;color:var(--dim);margin-top:3px}
+.ln-score{font-size:1.6rem;color:var(--gold);min-width:62px;text-align:center;position:relative;z-index:1}
+.ln-when{font-size:.8rem;color:var(--muted);margin-top:9px;text-align:center}
+.ln-detail{font-size:.76rem;color:var(--muted);margin-top:6px;line-height:1.5;text-align:center}
+
 /* ============ Head-to-head spotlight ============ */
 .spotlight{border-color:rgba(251,146,60,.45);box-shadow:0 0 28px rgba(251,146,60,.08)}
 .spot-carousel{display:flex;align-items:stretch;gap:8px}
@@ -379,6 +404,9 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;font-size:.72rem;color
   .panel{padding:14px 12px;margin-bottom:16px}
   main{padding:0 10px calc(40px + env(safe-area-inset-bottom))}
   .grid{grid-template-columns:1fr;gap:12px}     /* full-width cards on phones */
+  .live-grid{grid-template-columns:1fr}
+  .ln-flag{font-size:1.6rem}
+  .ln-score{font-size:1.35rem;min-width:54px}
   .fx-team{min-width:96px;font-size:.82rem}
   .tab{padding:8px 18px;font-size:.85rem}       /* bigger tap targets */
   .spot-nav{padding:0 14px}
@@ -428,6 +456,11 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;font-size:.72rem;color
 </div>
 
 <main>
+
+  <section class="panel livenow" id="liveNow" hidden>
+    <h2 id="liveNowTitle"><span class="live-dot">🔴</span> Live Now</h2>
+    <div class="live-grid" id="liveNowList"></div>
+  </section>
 
   <section class="panel spotlight" id="spotlight" hidden>
     <h2>🔥 Head-to-Head Spotlight</h2>
@@ -1187,6 +1220,66 @@ function renderTicker(){
   track.style.animationDuration = Math.max(30, items.length * 7) + "s";
 }
 
+/* ---------- Live Now (top section) ---------- */
+/* One match card: shows both teams, the live score, and — crucially — which
+   sweepstake player owns each side. Unowned sides show a muted dash. */
+function liveNowCard(fx){
+  const h = matchTeam(fx.teams.home), a = matchTeam(fx.teams.away);
+  const live = isLiveFx(fx);
+  const side = (apiTeam, owned) => `
+    <div class="ln-side"${owned ? ` data-team="${esc(owned.name)}" style="cursor:pointer"` : ""}>
+      <span class="ln-flag">${owned ? esc(owned.flag) : "🏳️"}</span>
+      <div class="ln-team">${esc(apiTeam.name)}</div>
+      ${owned ? ownerChip(owned.owner) : `<span class="ln-noowner">no owner</span>`}
+    </div>`;
+
+  let detail = "";
+  if (live){
+    const goals = (fx.events || []).filter((e) => e.type === "Goal" && e.detail !== "Missed Penalty")
+      .map((e) => `⚽ ${esc(e.player && e.player.name || "?")} ${e.time && e.time.elapsed || ""}'`);
+    const reds = (fx.events || []).filter((e) => e.type === "Card" && e.detail === "Red Card")
+      .map((e) => `🟥 ${esc(e.player && e.player.name || "?")}`);
+    detail = goals.concat(reds).join(" · ");
+  }
+  const score = live || isDoneFx(fx) ? `${fx.goals.home ?? 0} – ${fx.goals.away ?? 0}` : "v";
+  const status = live
+    ? esc(fx.fixture.status.elapsed != null ? fx.fixture.status.elapsed + "'" : (fxStatus(fx) === "HT" ? "Half-time" : "In play"))
+    : esc(fmtDayTime(kickoff(fx)) + (fx.league.round ? " · " + fx.league.round : ""));
+
+  return `<div class="ln-card${live ? " live" : ""}">
+    <div class="ln-tag">${live ? '<span class="live-dot">🔴</span> LIVE' : "⏰ UP NEXT"}</div>
+    <div class="ln-teams">
+      ${side(fx.teams.home, h)}
+      <div class="ln-score scoreboard">${score}</div>
+      ${side(fx.teams.away, a)}
+    </div>
+    <div class="ln-when">${status}</div>
+    ${detail ? `<div class="ln-detail">${detail}</div>` : ""}
+  </div>`;
+}
+
+function renderLiveNow(){
+  const owned = (fx) => matchTeam(fx.teams.home) || matchTeam(fx.teams.away);
+  // Live first: any match with at least one owned team currently in play.
+  let list = allFixtures().filter((fx) => isLiveFx(fx) && owned(fx)).sort((a, b) => kickoff(a) - kickoff(b));
+  let live = true;
+  // Nothing live → fall back to the next few upcoming owned-team fixtures.
+  if (!list.length){
+    const now = Date.now();
+    list = allFixtures()
+      .filter((fx) => !isDoneFx(fx) && !isLiveFx(fx) && kickoff(fx).getTime() > now && owned(fx))
+      .sort((a, b) => kickoff(a) - kickoff(b)).slice(0, 4);
+    live = false;
+  }
+  const panel = $("#liveNow");
+  panel.hidden = !list.length;
+  if (!list.length) return;
+  $("#liveNowTitle").innerHTML = live
+    ? `<span class="live-dot">🔴</span> Live Now`
+    : `⏳ Up Next`;
+  $("#liveNowList").innerHTML = list.map(liveNowCard).join("");
+}
+
 /* ---------- Head-to-head spotlight ---------- */
 function renderSpotlight(){
   const matches = allFixtures().filter((fx) => {
@@ -1593,6 +1686,7 @@ let lastRenderHash = "";
 function renderAll(force){
   renderHeader();      // cheap text updates
   renderTicker();      // has its own change-guard
+  renderLiveNow();     // top section — live matches + owners
   renderSpotlight();   // tiny panel
   const hash = JSON.stringify([
     state.model.participants.map((r) => [r.p.name, r.total, r.liveCount, r.aliveCount]),
