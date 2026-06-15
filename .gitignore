@@ -2,3 +2,7 @@ node_modules/
 .netlify/
 .env
 .DS_Store
+
+# Not part of this project
+Google Workspace Docs/
+stitch-projects/

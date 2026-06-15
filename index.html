@@ -125,6 +125,7 @@ button{font-family:inherit;cursor:pointer}
 .ln-noowner{display:inline-block;font-size:.68rem;color:var(--dim);margin-top:3px}
 .ln-score{font-size:1.6rem;color:var(--gold);min-width:62px;text-align:center;position:relative;z-index:1}
 .ln-when{font-size:.8rem;color:var(--muted);margin-top:9px;text-align:center}
+.ln-venue{font-size:.72rem;color:var(--dim);margin-top:4px;text-align:center}
 .ln-detail{font-size:.76rem;color:var(--muted);margin-top:6px;line-height:1.5;text-align:center}
 
 /* ============ Head-to-head spotlight ============ */
@@ -243,14 +244,17 @@ button{font-family:inherit;cursor:pointer}
 }
 .tab.active{background:var(--accent);border-color:var(--accent);color:#08130c;font-weight:700}
 .fx-day{font-family:var(--display);font-size:.72rem;letter-spacing:.1em;color:var(--muted);margin:14px 0 4px}
+.fx-item{border-bottom:1px solid rgba(255,255,255,.06);padding-bottom:4px}
 .fx-row{
   display:flex;align-items:center;gap:8px;padding:9px 6px;font-size:.88rem;
-  border-bottom:1px solid rgba(255,255,255,.05);flex-wrap:wrap;
+  flex-wrap:wrap;
 }
 .fx-team{flex:1;min-width:118px;display:flex;align-items:center;gap:6px}
 .fx-team.away{justify-content:flex-end;text-align:right}
-.fx-team .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.fx-mid{flex:none;width:88px;text-align:center}
+.fx-flag{flex:none;font-size:1.1rem;line-height:1}
+.fx-team .nm{color:var(--txt);font-weight:600;line-height:1.2;overflow-wrap:anywhere}
+.fx-mid{flex:none;width:84px;text-align:center}
+.fx-venue{font-size:.66rem;color:var(--muted);padding:0 6px 4px;display:flex;align-items:center;gap:4px}
 .fx-score{font-family:var(--display);font-size:1.02rem}
 .fx-score.live{color:#f87171}
 .fx-time{font-size:.8rem;color:var(--muted)}
@@ -321,8 +325,12 @@ button{font-family:inherit;cursor:pointer}
 }
 #gifOverlay img{max-width:min(74vw,480px);max-height:46vh;border-radius:14px;box-shadow:0 16px 48px rgba(0,0,0,.6)}
 .gif-caption{font-family:var(--display);font-size:clamp(1.3rem,5vw,2.2rem);color:var(--gold);text-shadow:0 2px 14px rgba(0,0,0,.7);text-align:center;padding:0 16px}
-.gif-fallback{font-size:5.4rem;animation:gifBounce .7s ease infinite alternate}
-@keyframes gifBounce{to{transform:translateY(-18px) scale(1.07)}}
+.gif-fallback{position:relative;font-size:6rem;line-height:1;animation:gifBounce .6s ease infinite alternate;filter:drop-shadow(0 8px 22px rgba(0,0,0,.55))}
+.gif-fallback::before{content:"";position:absolute;inset:-40% ;z-index:-1;border-radius:50%;
+  background:radial-gradient(circle,rgba(251,191,36,.55),rgba(74,222,128,.25) 45%,transparent 70%);
+  animation:goalGlow 1.1s ease-in-out infinite}
+@keyframes gifBounce{to{transform:translateY(-22px) scale(1.1) rotate(8deg)}}
+@keyframes goalGlow{0%,100%{transform:scale(.85);opacity:.6}50%{transform:scale(1.25);opacity:1}}
 
 /* ============ Red-card flash ============ */
 #redFlash{position:fixed;inset:0;z-index:70;pointer-events:none;opacity:0}
@@ -407,7 +415,10 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;font-size:.72rem;color
   .live-grid{grid-template-columns:1fr}
   .ln-flag{font-size:1.6rem}
   .ln-score{font-size:1.35rem;min-width:54px}
-  .fx-team{min-width:96px;font-size:.82rem}
+  .fx-team{min-width:104px;font-size:.9rem}
+  .fx-team .nm{font-weight:700}
+  .fx-mid{width:72px}
+  .fx-venue{font-size:.7rem}
   .tab{padding:8px 18px;font-size:.85rem}       /* bigger tap targets */
   .spot-nav{padding:0 14px}
   .team-row{padding:8px 12px}
@@ -602,15 +613,17 @@ const CONFIG = {
 const LIVE_STATUSES = new Set(["1H","HT","2H","ET","BT","P","LIVE","INT","SUSP"]);
 const FINISHED_STATUSES = new Set(["FT","AET","PEN"]);
 
-/* Celebration GIFs — swap for local files (e.g. "assets/gifs/goal1.gif") if any
-   of these Giphy links die. A broken image falls back to a bouncing ⚽ emoji. */
-const GOAL_GIFS = [
-  "https://media.giphy.com/media/3oz8xRF0v9WMAUVLNK/giphy.gif",
-  "https://media.giphy.com/media/l0HU7JI1nzVRLkKDS/giphy.gif",
-  "https://media.giphy.com/media/wAxlCmeX1ri1y/giphy.gif",
-  "https://media.giphy.com/media/3o6ZsYm5P38NvFPMis/giphy.gif",
-  "https://media.giphy.com/media/26tOZ42Mg6pbTUPHW/giphy.gif"
-];
+/* Celebration GIFs.
+   IMPORTANT: hot-linked Giphy GIFs are unreliable — when a GIF is deleted,
+   Giphy serves a "THIS CONTENT IS NOT AVAILABLE" placeholder with a normal
+   HTTP 200, so the browser's onerror never fires and the ugly placeholder
+   shows instead of the goal celebration. To guarantee that never happens,
+   the default celebration is now a self-contained animated scene (big ball +
+   confetti + caption) that can't 404.
+   To use real video GIFs, drop your own files into assets/gifs/ and list them
+   below (LOCAL files can't be deleted out from under you). Example:
+   const GOAL_GIFS = ["assets/gifs/goal1.gif", "assets/gifs/goal2.gif"]; */
+const GOAL_GIFS = [];
 
 /* ============================================================
    3. UTILITIES
@@ -964,9 +977,16 @@ function adaptEspn(ev){
   const penA = ac.shootoutScore != null ? Number(ac.shootoutScore) : null;
   if ((penH != null || penA != null) && (short === "FT" || short === "AET")) short = "PEN";
   const elapsed = st.displayClock ? (parseInt(st.displayClock, 10) || null) : null;
+  // Stadium / venue — ESPN supplies this on the competition. Keep it small.
+  const v = comp.venue || (ev.competitions && ev.competitions[0] && ev.competitions[0].venue);
+  const venue = v ? {
+    name: v.fullName || v.name || "",
+    city: (v.address && (v.address.city || v.address.summary)) || ""
+  } : null;
   return {
     fixture: { id: Number(ev.id), date: ev.date, status: { short, elapsed: LIVE_STATUSES.has(short) ? elapsed : null } },
     league: { id: 606, round: roundForDate(new Date(ev.date)) },
+    venue,
     teams: { home: homeT, away: awayT },
     goals: { home: hc.score != null ? Number(hc.score) : null, away: ac.score != null ? Number(ac.score) : null },
     score: { penalty: { home: penH, away: penA } },
@@ -1254,6 +1274,7 @@ function liveNowCard(fx){
       ${side(fx.teams.away, a)}
     </div>
     <div class="ln-when">${status}</div>
+    ${fx.venue && fx.venue.name ? `<div class="ln-venue">📍 ${esc(fx.venue.city ? fx.venue.name + " · " + fx.venue.city : fx.venue.name)}</div>` : ""}
     ${detail ? `<div class="ln-detail">${detail}</div>` : ""}
   </div>`;
 }
@@ -1449,6 +1470,12 @@ $("#leaderboard").addEventListener("click", (e) => {
 });
 
 /* ---------- Fixtures & Results tabs ---------- */
+/* Stadium line for a fixture — empty string if ESPN didn't supply a venue. */
+function venueLine(fx){
+  if (!fx.venue || !fx.venue.name) return "";
+  const where = fx.venue.city ? `${fx.venue.name} · ${fx.venue.city}` : fx.venue.name;
+  return `<div class="fx-venue">📍 ${esc(where)}</div>`;
+}
 function fxRow(fx){
   const h = matchTeam(fx.teams.home), a = matchTeam(fx.teams.away);
   const live = isLiveFx(fx), done = isDoneFx(fx);
@@ -1458,11 +1485,14 @@ function fxRow(fx){
        <span class="fx-st">${live ? esc((fx.fixture.status.elapsed ?? "") + "' LIVE") : esc(fxStatus(fx)) + (fxStatus(fx) === "PEN" && fx.score && fx.score.penalty ? ` ${fx.score.penalty.home}-${fx.score.penalty.away}p` : "")}</span>`
     : `<span class="fx-time">${esc(fmtTime(kickoff(fx)))}</span><span class="fx-st">${esc(fmtDay(kickoff(fx)))}</span>`;
   return `
-  <div class="fx-row">
-    <div class="fx-team"${h ? ` data-team="${esc(h.name)}" style="cursor:pointer"` : ""}><span>${h ? esc(h.flag) : "🏳️"}</span><span class="nm">${esc(fx.teams.home.name)}</span>${h ? ownerChip(h.owner) : ""}</div>
-    <div class="fx-mid">${mid}</div>
-    <div class="fx-team away"${a ? ` data-team="${esc(a.name)}" style="cursor:pointer"` : ""}>${a ? ownerChip(a.owner) : ""}<span class="nm">${esc(fx.teams.away.name)}</span><span>${a ? esc(a.flag) : "🏳️"}</span></div>
-    <span class="fx-fire">${fire ? "🔥" : ""}</span>
+  <div class="fx-item">
+    <div class="fx-row">
+      <div class="fx-team"${h ? ` data-team="${esc(h.name)}" style="cursor:pointer"` : ""}><span class="fx-flag">${h ? esc(h.flag) : "🏳️"}</span><span class="nm">${esc(fx.teams.home.name)}</span>${h ? ownerChip(h.owner) : ""}</div>
+      <div class="fx-mid">${mid}</div>
+      <div class="fx-team away"${a ? ` data-team="${esc(a.name)}" style="cursor:pointer"` : ""}>${a ? ownerChip(a.owner) : ""}<span class="nm">${esc(fx.teams.away.name)}</span><span class="fx-flag">${a ? esc(a.flag) : "🏳️"}</span></div>
+      <span class="fx-fire">${fire ? "🔥" : ""}</span>
+    </div>
+    ${venueLine(fx)}
   </div>`;
 }
 
@@ -1471,7 +1501,10 @@ function renderFixtures(){
   const today = ukDateKey(new Date());
   let list = [], empty = "";
   if (state.fxTab === "today"){
-    list = all.filter((fx) => ukDateKey(kickoff(fx)) === today);
+    // Order: live matches first, then today's finished results, then what's still to come.
+    const rank = (fx) => isLiveFx(fx) ? 0 : isDoneFx(fx) ? 1 : 2;
+    list = all.filter((fx) => ukDateKey(kickoff(fx)) === today)
+      .sort((a, b) => (rank(a) - rank(b)) || (kickoff(a) - kickoff(b)));
     empty = "No matches today — rest day. Hydrate. 🍺";
   } else if (state.fxTab === "upcoming"){
     list = all.filter((fx) => fxStatus(fx) === "NS" && kickoff(fx) > new Date()).slice(0, 18);
@@ -1876,10 +1909,32 @@ function fireConfetti(){
 
 function showGoalOverlay(caption){
   const ov = $("#gifOverlay");
-  const gif = GOAL_GIFS[Math.floor(Math.random() * GOAL_GIFS.length)];
-  ov.innerHTML = `<img src="${esc(gif)}" alt="celebration"
-      onerror="this.outerHTML='<div class=&quot;gif-fallback&quot;>⚽🎉</div>'">
-    <div class="gif-caption">${caption}</div>`;
+  const capHtml = `<div class="gif-caption">${caption}</div>`;
+  // Self-contained celebration — never 404s, never shows a dead-link placeholder.
+  const fallback = () => { ov.innerHTML = `<div class="gif-fallback">⚽</div>${capHtml}`; };
+  const list = Array.isArray(GOAL_GIFS) ? GOAL_GIFS.filter(Boolean) : [];
+
+  if (!list.length){
+    fallback();
+  } else {
+    // Preload and validate before showing, with a watchdog: any dead/slow/broken
+    // link silently falls back instead of flashing a placeholder.
+    const src = list[Math.floor(Math.random() * list.length)];
+    const img = new Image();
+    let settled = false;
+    const settle = (ok) => {
+      if (settled) return; settled = true;
+      if (ok && img.naturalWidth > 40 && img.naturalHeight > 40){
+        ov.innerHTML = `<img src="${esc(src)}" alt="celebration">${capHtml}`;
+      } else fallback();
+    };
+    img.onload = () => settle(true);
+    img.onerror = () => settle(false);
+    setTimeout(() => settle(false), 2200);   // watchdog for hung/placeholder loads
+    img.src = src;
+    fallback();                              // show something instantly while it loads
+  }
+
   ov.hidden = false;
   clearTimeout(showGoalOverlay._t);
   showGoalOverlay._t = setTimeout(() => { ov.hidden = true; }, 4000);
