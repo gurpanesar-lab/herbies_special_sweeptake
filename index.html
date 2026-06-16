@@ -341,6 +341,24 @@ button{font-family:inherit;cursor:pointer}
   animation:goalGlow 1.1s ease-in-out infinite}
 @keyframes gifBounce{to{transform:translateY(-22px) scale(1.1) rotate(8deg)}}
 @keyframes goalGlow{0%,100%{transform:scale(.85);opacity:.6}50%{transform:scale(1.25);opacity:1}}
+.gif-sub{font-size:clamp(.95rem,3.4vw,1.25rem);color:#eaf7ef;font-weight:700;text-shadow:0 2px 10px rgba(0,0,0,.7);text-align:center;margin-top:-4px}
+.gif-sub .gp{color:var(--accent)}
+
+/* ============ Feature polish: form dots, momentum, rank deltas ============ */
+.form-dots{display:inline-flex;gap:3px;margin-left:6px;vertical-align:middle}
+.fd{width:7px;height:7px;border-radius:50%;display:inline-block;background:var(--dim)}
+.fd-W{background:#34d399}.fd-D{background:#9ca3af}.fd-L{background:#f87171}
+.fire-badge{margin-left:6px;font-size:.92rem;animation:firePulse 1.1s ease-in-out infinite;display:inline-block}
+@keyframes firePulse{50%{transform:scale(1.22) rotate(-6deg)}}
+.lb-delta{display:inline-block;font-size:.62rem;font-weight:800;margin-left:5px;vertical-align:middle}
+.lb-up{color:#34d399}.lb-down{color:#f87171}.lb-same{color:var(--dim)}
+.lb-pts{transition:color .3s}
+.panel-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.recap-stat{display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;margin-bottom:8px}
+.recap-stat .re-emoji{font-size:1.5rem;flex:none}
+.recap-stat .re-body{display:flex;flex-direction:column}
+.recap-stat .re-title{font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.recap-stat .re-val{font-size:.95rem;color:var(--txt);font-weight:600}
 
 /* ============ Red-card flash ============ */
 #redFlash{position:fixed;inset:0;z-index:70;pointer-events:none;opacity:0}
@@ -503,7 +521,11 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;font-size:.72rem;color
     <h2>🏆 Leaderboard</h2>
     <div id="leaderboard"></div>
     <div class="lb-hint">Tap a row for the points breakdown — or tap any player/team card above for full stats.</div>
-    <button class="btn ghost" id="rulesBtn" style="margin-top:10px">📜 Scoring rules</button>
+    <div class="panel-actions">
+      <button class="btn ghost" id="rulesBtn">📜 Scoring rules</button>
+      <button class="btn ghost" id="recapBtn">📅 Today's recap</button>
+      <button class="btn" id="shareBtn">📤 Share standings</button>
+    </div>
   </section>
 
   <section class="panel">
@@ -617,6 +639,7 @@ const CONFIG = {
   dailyRequestBudget: 2000,    // safety net only — ESPN has no hard daily quota
   maxSummaryFetchPerCycle: 6,  // max NEW match-summary calls per refresh cycle
   adminPass: "corner-flag",    // ?admin=true passphrase — change me!
+  tournamentName: "World Cup 2026 Sweepstake",  // used in share card + recap
   tournamentStart: "2026-06-11",
   tournamentEnd: "2026-07-19"
 };
@@ -690,7 +713,9 @@ const state = {
   lastUpdated: null,
   model: null,             // computed scores model
   prevRects: new Map(),    // for FLIP animations
-  prevTotals: new Map(),   // for count-up animations
+  prevTotals: new Map(),   // for count-up animations (grid)
+  lbTotals: {},            // count-up baseline (leaderboard)
+  lbOrder: LS.get("lbOrder", null),  // previous rank order, for ▲▼ deltas
   fxTab: "today",
   spotIndex: 0,
   spotMatches: [],
@@ -1391,14 +1416,17 @@ function renderGrid(){
   const oldRects = new Map();
   for (const el of grid.children) oldRects.set(el.dataset.name, el.getBoundingClientRect());
 
+  const onFire = momentumLeader();
   grid.innerHTML = state.model.participants.map((row, i) => {
     const p = row.p;
     const live = row.liveCount > 0;
+    const fire = onFire && onFire.name === p.name
+      ? `<span class="fire-badge" title="On fire — +${onFire.gain} pts in the last few hours">🔥</span>` : "";
     return `
     <div class="card${live ? " live" : ""}" data-name="${esc(p.name)}" style="--oc:${esc(p.color)}">
       <div class="card-head" title="Tap for ${esc(p.name)}'s full stats">
         <span class="avatar" style="background:${esc(p.color)}">${esc(initials(p.name))}</span>
-        <span class="card-name">${esc(p.name)}<div class="card-rank">#${i + 1} · ${row.aliveCount}/6 teams alive</div></span>
+        <span class="card-name">${esc(p.name)}${fire}<div class="card-rank">#${i + 1} · ${row.aliveCount}/6 teams alive ${formDots(p.name)}</div></span>
         <span class="card-pts" data-countup="${row.total}">${row.total}</span>
       </div>
       ${row.teams.map((ts) => `
@@ -1446,20 +1474,29 @@ function animateCount(el, from, to){
 }
 
 /* ---------- Leaderboard ---------- */
+function rankDelta(name, i){
+  const prev = state.lbOrder;
+  if (!prev || prev[name] == null) return "";
+  const d = prev[name] - i;            // +ve = climbed
+  if (d > 0) return `<span class="lb-delta lb-up" title="Up ${d}">▲${d}</span>`;
+  if (d < 0) return `<span class="lb-delta lb-down" title="Down ${-d}">▼${-d}</span>`;
+  return `<span class="lb-delta lb-same" title="No change">–</span>`;
+}
 function renderLeaderboard(){
   const medals = ["gold", "silver", "bronze"];
+  const fromTotals = state.lbTotals || {};
   $("#leaderboard").innerHTML = `
   <table class="lb-table">
     <thead><tr><th>#</th><th>Owner</th><th style="text-align:right">⚽</th><th style="text-align:right">🟨🟥</th><th style="text-align:right">🧤</th><th style="text-align:right">PTS</th></tr></thead>
     <tbody>
       ${state.model.participants.map((row, i) => `
       <tr class="lb-row ${medals[i] || ""}" data-name="${esc(row.p.name)}">
-        <td class="lb-rank">${i < 3 ? ["🥇","🥈","🥉"][i] : i + 1}</td>
+        <td class="lb-rank">${i < 3 ? ["🥇","🥈","🥉"][i] : i + 1}${rankDelta(row.p.name, i)}</td>
         <td>${ownerChip(row.p)}</td>
         <td class="lb-num">${row.goals}</td>
         <td class="lb-num">${row.cards}</td>
         <td class="lb-num">${row.saves}</td>
-        <td class="lb-pts">${row.total}</td>
+        <td class="lb-pts" data-lbcount="${row.total}">${row.total}</td>
       </tr>
       <tr class="lb-break" data-for="${esc(row.p.name)}" hidden><td colspan="6">
         ${row.teams.map((ts) => `
@@ -1472,6 +1509,20 @@ function renderLeaderboard(){
       </td></tr>`).join("")}
     </tbody>
   </table>`;
+  // Count-up the points cells from their previous values.
+  if (!reducedMotion){
+    for (const el of $("#leaderboard").querySelectorAll("[data-lbcount]")){
+      const name = el.closest(".lb-row").dataset.name;
+      const to = Number(el.dataset.lbcount), from = fromTotals[name] ?? to;
+      if (from !== to) animateCount(el, from, to);
+    }
+  }
+  // Remember totals + rank order for the next render's deltas/count-ups.
+  const totals = {}, order = {};
+  state.model.participants.forEach((r, i) => { totals[r.p.name] = r.total; order[r.p.name] = i; });
+  state.lbTotals = totals;
+  state.lbOrder = order;
+  LS.set("lbOrder", order);
 }
 $("#leaderboard").addEventListener("click", (e) => {
   const row = e.target.closest(".lb-row");
@@ -1739,10 +1790,171 @@ function showStatRank(kind){
     }).join("")}`);
 }
 
+/* ============================================================
+   9a. FEATURE HELPERS — history, form, momentum, recap, sharing
+   ============================================================ */
+
+/* Rolling points history in localStorage — powers rank deltas, the on-fire
+   badge and the daily recap. One deduped snapshot per change, pruned to 24h. */
+function recordHistory(){
+  if (!state.model) return [];
+  const totals = {};
+  for (const r of state.model.participants) totals[r.p.name] = r.total;
+  const now = Date.now();
+  let hist = LS.get("ptsHistory", []);
+  const last = hist[hist.length - 1];
+  if (!last || JSON.stringify(last.totals) !== JSON.stringify(totals))
+    hist.push({ t: now, totals });
+  const cutoff = now - 24 * 3600 * 1000;
+  hist = hist.filter((s) => s.t >= cutoff);
+  if (hist.length > 240) hist = hist.slice(-240);
+  LS.set("ptsHistory", hist);
+  return hist;
+}
+/* The most recent recorded total for an owner at or before time `beforeT`. */
+function totalAt(hist, name, beforeT){
+  let v = null;
+  for (const s of hist) if (s.t <= beforeT && s.totals[name] != null) v = s.totals[name];
+  return v;
+}
+/* Owner with the biggest points gain over the last ~3h (the "on fire" badge). */
+function momentumLeader(){
+  const hist = LS.get("ptsHistory", []);
+  if (hist.length < 2 || !state.model) return null;
+  const since = Date.now() - 3 * 3600 * 1000;
+  let best = null;
+  for (const r of state.model.participants){
+    const past = totalAt(hist, r.p.name, since);
+    if (past == null) continue;
+    const gain = r.total - past;
+    if (gain > 0 && (!best || gain > best.gain)) best = { name: r.p.name, gain };
+  }
+  return best;
+}
+/* Last-5 form for an owner (most recent first): 'W' | 'D' | 'L'. */
+function ownerForm(ownerName){
+  const out = [];
+  for (const fx of allFixtures()){
+    if (!isDoneFx(fx)) continue;
+    for (const side of ["home", "away"]){
+      const t = matchTeam(fx.teams[side]);
+      if (!t || !t.owner || t.owner.name !== ownerName) continue;
+      const gf = fx.goals[side] ?? 0, ga = fx.goals[side === "home" ? "away" : "home"] ?? 0;
+      out.push({ t: kickoff(fx).getTime(), r: gf > ga ? "W" : gf < ga ? "L" : "D" });
+    }
+  }
+  return out.sort((a, b) => b.t - a.t).slice(0, 5).map((x) => x.r);
+}
+function formDots(ownerName){
+  const f = ownerForm(ownerName);
+  if (!f.length) return "";
+  return `<span class="form-dots" title="Recent form (newest first): ${f.join(" ")}">` +
+    f.map((r) => `<span class="fd fd-${r}"></span>`).join("") + `</span>`;
+}
+
+/* ---------- Daily recap ---------- */
+function todayGoalsByOwner(){
+  const today = ukDateKey(new Date()), g = {};
+  for (const fx of allFixtures()){
+    if (ukDateKey(kickoff(fx)) !== today || fxStatus(fx) === "NS") continue;
+    for (const side of ["home", "away"]){
+      const t = matchTeam(fx.teams[side]);
+      if (t && t.owner) g[t.owner.name] = (g[t.owner.name] || 0) + (fx.goals[side] ?? 0);
+    }
+  }
+  return g;
+}
+function showDailyRecap(){
+  if (!state.model) return;
+  const P = state.model.participants;
+  const hist = LS.get("ptsHistory", []);
+  const today = ukDateKey(new Date());
+  const startToday = (hist.find((s) => ukDateKey(s.t) === today) || hist[0] || { totals: {} }).totals;
+  let mover = null, topG = null;
+  const goalsToday = todayGoalsByOwner();
+  for (const r of P){
+    const gained = r.total - (startToday[r.p.name] ?? r.total);
+    if (!mover || gained > mover.v) mover = { p: r.p, v: gained };
+    const g = goalsToday[r.p.name] || 0;
+    if (!topG || g > topG.v) topG = { p: r.p, v: g };
+  }
+  const spoon = P[P.length - 1];
+  const leader = P[0];
+  const stat = (emoji, title, val) => `<div class="recap-stat"><span class="re-emoji">${emoji}</span>
+    <span class="re-body"><span class="re-title">${title}</span><span class="re-val">${val}</span></span></div>`;
+  openModal(`
+    <button class="modal-close" aria-label="Close">×</button>
+    <div class="m-title">📅 Today's Recap</div>
+    <div class="m-sub" style="margin-bottom:12px">${esc(fmtDay(new Date()))}</div>
+    ${stat("👑", "Leading the sweepstake", `${esc(leader.p.name)} — ${leader.total} pts`)}
+    ${stat("📈", "Biggest mover today", mover && mover.v > 0 ? `${esc(mover.p.name)} +${mover.v} pts` : "No points yet today")}
+    ${stat("👟", "Top scorer today", topG && topG.v > 0 ? `${esc(topG.p.name)} — ${topG.v} goal${topG.v > 1 ? "s" : ""}` : "No goals yet today")}
+    ${stat("🥄", "Wooden spoon watch", `${esc(spoon.p.name)} — ${spoon.total} pts`)}`);
+}
+
+/* ---------- Share standings ---------- */
+function standingsText(){
+  const P = state.model.participants;
+  const lines = P.map((r, i) => `${i + 1}. ${r.p.name} — ${r.total} pts`);
+  return `⚽ ${CONFIG.tournamentName || "Sweepstake"} — ${fmtDay(new Date())}\n\n` +
+    lines.join("\n") + `\n\nLive: ${location.origin}`;
+}
+function standingsImageBlob(){
+  return new Promise((resolve) => {
+    const P = state.model.participants;
+    const W = 720, pad = 40, rowH = 64, top = 168;
+    const H = top + P.length * rowH + 48;
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const x = c.getContext("2d");
+    const grad = x.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, "#0e4a30"); grad.addColorStop(1, "#072417");
+    x.fillStyle = grad; x.fillRect(0, 0, W, H);
+    x.fillStyle = "#fbbf24"; x.font = "800 40px Arial";
+    x.fillText("🏆 " + (CONFIG.tournamentName || "Sweepstake"), pad, 70);
+    x.fillStyle = "#9fc4b0"; x.font = "500 22px Arial";
+    x.fillText(fmtDay(new Date()) + " · Live standings", pad, 108);
+    x.strokeStyle = "rgba(255,255,255,.12)"; x.beginPath(); x.moveTo(pad, 134); x.lineTo(W - pad, 134); x.stroke();
+    P.forEach((r, i) => {
+      const y = top + i * rowH;
+      if (i % 2 === 0){ x.fillStyle = "rgba(255,255,255,.04)"; x.fillRect(pad - 12, y - 38, W - 2 * (pad - 12), rowH - 8); }
+      x.fillStyle = i < 3 ? "#fbbf24" : "#eaf7ef"; x.font = "800 30px Arial";
+      x.fillText(["🥇","🥈","🥉"][i] || (i + 1) + ".", pad, y);
+      x.fillStyle = r.p.color || "#34d399"; x.beginPath(); x.arc(pad + 86, y - 10, 11, 0, 7); x.fill();
+      x.fillStyle = "#eaf7ef"; x.font = "700 28px Arial";
+      x.fillText(r.p.name, pad + 110, y);
+      x.fillStyle = "#34d399"; x.font = "800 30px Arial"; x.textAlign = "right";
+      x.fillText(r.total + " pts", W - pad, y); x.textAlign = "left";
+    });
+    c.toBlob((b) => resolve(b), "image/png");
+  });
+}
+async function shareStandings(){
+  if (!state.model) return;
+  const text = standingsText();
+  try {
+    const blob = await standingsImageBlob();
+    const file = new File([blob], "standings.png", { type: "image/png" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })){
+      await navigator.share({ files: [file], text }); return;
+    }
+  } catch (e) { /* fall through */ }
+  if (navigator.share){ try { await navigator.share({ text }); return; } catch (e) {} }
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast("📋 Standings copied — paste them into the group chat", "gold");
+  } catch (e) {
+    openModal(`<button class="modal-close" aria-label="Close">×</button>
+      <div class="m-title">📊 Share standings</div>
+      <pre style="white-space:pre-wrap;font-size:.85rem;color:var(--txt)">${esc(text)}</pre>`);
+  }
+}
+
 /* Heavy DOM rebuilds only happen when something actually changed — polling a
    quiet schedule no longer touches the DOM, which keeps scrolling rock-steady. */
 let lastRenderHash = "";
 function renderAll(force){
+  recordHistory();     // snapshot points for deltas/momentum/recap
   renderHeader();      // cheap text updates
   renderTicker();      // has its own change-guard
   renderLiveNow();     // top section — live matches + owners
@@ -1899,6 +2111,8 @@ $("#rulesBtn").addEventListener("click", () => {
       `<div class="m-row"><b>${RULE_LABELS[k]}</b><span class="m-pts">${SCORING[k] > 0 ? "+" : ""}${SCORING[k]}</span></div>`).join("")}
   `);
 });
+$("#recapBtn").addEventListener("click", showDailyRecap);
+$("#shareBtn").addEventListener("click", shareStandings);
 
 /* ---------- Click-through wiring (event delegation) ---------- */
 document.addEventListener("click", (e) => {
@@ -1924,18 +2138,20 @@ function showToast(html, cls){
   setTimeout(() => el.remove(), 6000);
 }
 
-function fireConfetti(){
+function fireConfetti(color){
   if (reducedMotion || typeof confetti !== "function") return;
-  // Fewer particles on phones — same party, less GPU strain.
+  // Owner-coloured party when we know whose team scored.
+  const colors = color ? [color, "#ffffff", "#fbbf24"] : undefined;
   const k = window.innerWidth < 640 ? 0.55 : 1;
-  confetti({ particleCount: Math.round(160 * k), spread: 75, origin: { y: 0.7 } });
-  setTimeout(() => confetti({ particleCount: Math.round(90 * k), angle: 60, spread: 60, origin: { x: 0 } }), 250);
-  setTimeout(() => confetti({ particleCount: Math.round(90 * k), angle: 120, spread: 60, origin: { x: 1 } }), 400);
+  const opt = (o) => colors ? Object.assign({ colors }, o) : o;
+  confetti(opt({ particleCount: Math.round(160 * k), spread: 75, origin: { y: 0.7 } }));
+  setTimeout(() => confetti(opt({ particleCount: Math.round(90 * k), angle: 60, spread: 60, origin: { x: 0 } })), 250);
+  setTimeout(() => confetti(opt({ particleCount: Math.round(90 * k), angle: 120, spread: 60, origin: { x: 1 } })), 400);
 }
 
-function showGoalOverlay(caption){
+function showGoalOverlay(caption, sub){
   const ov = $("#gifOverlay");
-  const capHtml = `<div class="gif-caption">${caption}</div>`;
+  const capHtml = `<div class="gif-caption">${caption}</div>` + (sub ? `<div class="gif-sub">${sub}</div>` : "");
   // Self-contained celebration — never 404s, never shows a dead-link placeholder.
   const fallback = () => { ov.innerHTML = `<div class="gif-fallback">⚽</div>${capHtml}`; };
   const list = Array.isArray(GOAL_GIFS) ? GOAL_GIFS.filter(Boolean) : [];
@@ -2000,13 +2216,20 @@ function detectCelebrations(){
     const home = matchTeam(fx.teams.home), away = matchTeam(fx.teams.away);
 
     // Goals
-    for (const [team, scored] of [[home, n.h - p.h], [away, n.a - p.a]]){
+    for (const [side, team, scored] of [["home", home, n.h - p.h], ["away", away, n.a - p.a]]){
       if (team && scored > 0){
+        const pts = scored * SCORING.goal;
+        // Latest goal scorer for this side, if ESPN named them.
+        const ev = (fx.events || []).filter((e) => e.type === "Goal" && e.detail !== "Missed Penalty" &&
+          e.team && norm(e.team.name) === norm(fx.teams[side].name)).slice(-1)[0];
+        const scorer = ev && ev.player && ev.player.name ? ev.player.name : "";
+        const color = team.owner.color;
         setTimeout(() => {
-          fireConfetti();
+          fireConfetti(color);
           showToast(`⚽ <b>GOOOAL!</b> ${esc(team.owner.name)}'s ${esc(team.flag)} ${esc(team.name)}! ` +
             `${esc(fx.teams.home.name)} ${n.h}-${n.a} ${esc(fx.teams.away.name)}`, "gold");
-          showGoalOverlay(`⚽ GOOOAL! ${esc(team.owner.name)}'s ${esc(team.name)}!`);
+          showGoalOverlay(`⚽ GOOOAL! ${esc(team.owner.name)}'s ${esc(team.name)}!`,
+            `${scorer ? esc(scorer) + " · " : ""}<span class="gp">+${pts} pts</span>`);
         }, goalDelay);
         goalDelay += 4500;
       }
