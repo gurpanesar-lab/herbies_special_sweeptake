@@ -360,6 +360,33 @@ button{font-family:inherit;cursor:pointer}
 .recap-stat .re-title{font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .recap-stat .re-val{font-size:.95rem;color:var(--txt);font-weight:600}
 
+/* ============ Live event rows + match-detail modal ============ */
+.fx-mid-click{cursor:pointer;border-radius:8px}
+@media (hover:hover){ .fx-mid-click:hover{background:rgba(255,255,255,.06)} }
+.ln-detail{display:flex;flex-direction:column;gap:3px}
+.ln-ev{font-size:.78rem;color:var(--txt);text-align:center}
+.ln-min{display:inline-block;min-width:26px;color:var(--gold);font-weight:700;margin-right:4px}
+.ln-evteam{color:var(--muted)}
+.ln-more{margin-top:8px;font-size:.72rem;color:var(--accent);text-align:center;font-weight:700}
+.ln-card[data-match]{cursor:pointer}
+.mx-head{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin:4px 0 2px}
+.mx-team{font-size:1rem;text-align:center}
+.mx-team b{display:block;font-size:.92rem;margin-top:2px}
+.mx-score{font-family:var(--display);font-size:1.7rem;color:var(--txt);text-align:center;line-height:1.1}
+.mx-when{display:block;font-size:.64rem;letter-spacing:.05em;color:var(--muted);text-transform:uppercase;margin-top:3px;white-space:nowrap}
+.mx-when.live{color:#f87171}
+.mx-venue{text-align:center;font-size:.72rem;color:var(--muted);margin-bottom:10px}
+.mx-body{border-top:1px solid var(--line);padding-top:10px;max-height:52vh;overflow-y:auto}
+.mx-sec{font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+.mx-ev{display:flex;align-items:baseline;gap:8px;padding:4px 0;font-size:.9rem}
+.mx-ev .mx-min{min-width:34px;color:var(--gold);font-weight:700;font-size:.82rem}
+.mx-ev .mx-ic{flex:none}
+.mx-ev .mx-tx{color:var(--txt)}
+.mx-ev .mx-d{color:var(--muted);font-size:.8rem}
+.mx-cm{display:flex;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:.82rem;color:var(--muted);line-height:1.45}
+.mx-cm .mx-min{min-width:34px;color:var(--accent);font-weight:700;flex:none}
+.mx-empty{color:var(--dim);font-size:.85rem;padding:4px 0}
+
 /* ============ Red-card flash ============ */
 #redFlash{position:fixed;inset:0;z-index:70;pointer-events:none;opacity:0}
 #redFlash.on{animation:redPulse .95s ease-out 2}
@@ -990,7 +1017,32 @@ function slimSummary(j){
       });
     }
   } catch (e) { /* no boxscore — stats stay unknown */ }
-  return { boxscore: { teams } };
+  // Goal/card events (scorer + minute + team) for the match-detail modal.
+  const events = [];
+  try {
+    for (const k of (j.keyEvents || j.scoringPlays || [])){
+      const txt = (k.type && k.type.text) || k.text || "";
+      const isCard = /card/i.test(txt);
+      const isGoal = k.scoringPlay === true || /goal/i.test(txt);
+      if (!isCard && !isGoal) continue;
+      events.push({
+        kind: isCard ? (/red/i.test(txt) ? "red" : "yellow") : "goal",
+        detail: isGoal ? (/own/i.test(txt) ? "Own goal" : /penalt/i.test(txt) ? "Penalty" : "") : "",
+        player: (k.athletesInvolved && k.athletesInvolved[0] && k.athletesInvolved[0].displayName) || "",
+        teamId: Number(k.team && k.team.id) || null,
+        min: (k.clock && k.clock.displayValue) || (k.time && k.time.displayValue) || ""
+      });
+    }
+  } catch (e) { /* no key events */ }
+  // Text commentary feed (live games).
+  const commentary = [];
+  try {
+    for (const c of (j.commentary || [])){
+      const text = c.text || (c.play && c.play.text) || "";
+      if (text) commentary.push({ min: (c.time && c.time.displayValue) || "", text });
+    }
+  } catch (e) { /* no commentary */ }
+  return { boxscore: { teams }, events, commentary };
 }
 function slimStandings(j){
   state.groups = {};
@@ -1234,6 +1286,10 @@ function tickerItems(){
   const items = [];
   for (const m of state.model.overrides.tickerMessages) items.push("📢 <b>" + esc(m) + "</b>");
 
+  // Momentum — whoever's surged most in the last few hours.
+  const mo = momentumLeader();
+  if (mo) items.push(`🔥 ON FIRE: <b>${esc(mo.name)}</b> +${mo.gain} pts in the last few hours`);
+
   const fixtures = allFixtures();
   // Live events (goals + cards) — the live feed embeds an events array.
   for (const fx of fixtures.filter(isLiveFx)){
@@ -1291,18 +1347,23 @@ function liveNowCard(fx){
 
   let detail = "";
   if (live){
-    const goals = (fx.events || []).filter((e) => e.type === "Goal" && e.detail !== "Missed Penalty")
-      .map((e) => `⚽ ${esc(e.player && e.player.name || "?")} ${e.time && e.time.elapsed || ""}'`);
-    const reds = (fx.events || []).filter((e) => e.type === "Card" && e.detail === "Red Card")
-      .map((e) => `🟥 ${esc(e.player && e.player.name || "?")}`);
-    detail = goals.concat(reds).join(" · ");
+    // Make it explicit WHO scored and for WHICH team.
+    const rows = (fx.events || [])
+      .filter((e) => (e.type === "Goal" && e.detail !== "Missed Penalty") || (e.type === "Card" && e.detail === "Red Card"))
+      .map((e) => {
+        const min = e.time && e.time.elapsed != null ? e.time.elapsed + "'" : "";
+        const tm = e.team ? e.team.name : "";
+        const ico = e.type === "Goal" ? "⚽" : "🟥";
+        return `<div class="ln-ev"><span class="ln-min">${esc(min)}</span>${ico} <b>${esc(e.player && e.player.name || "?")}</b> <span class="ln-evteam">${esc(tm)}</span></div>`;
+      });
+    detail = rows.join("");
   }
   const score = live || isDoneFx(fx) ? `${fx.goals.home ?? 0} – ${fx.goals.away ?? 0}` : "v";
   const status = live
     ? esc(fx.fixture.status.elapsed != null ? fx.fixture.status.elapsed + "'" : (fxStatus(fx) === "HT" ? "Half-time" : "In play"))
     : esc(fmtDayTime(kickoff(fx)) + (fx.league.round ? " · " + fx.league.round : ""));
 
-  return `<div class="ln-card${live ? " live" : ""}">
+  return `<div class="ln-card${live ? " live" : ""}"${live ? ` data-match="${fx.fixture.id}"` : ""}>
     <div class="ln-tag">${live ? '<span class="live-dot">🔴</span> LIVE' : "⏰ UP NEXT"}</div>
     <div class="ln-teams">
       ${side(fx.teams.home, h)}
@@ -1312,6 +1373,7 @@ function liveNowCard(fx){
     <div class="ln-when">${status}</div>
     ${fx.venue && fx.venue.name ? `<div class="ln-venue">📍 ${esc(fx.venue.city ? fx.venue.name + " · " + fx.venue.city : fx.venue.name)}</div>` : ""}
     ${detail ? `<div class="ln-detail">${detail}</div>` : ""}
+    ${live ? `<div class="ln-more">Tap for commentary →</div>` : ""}
   </div>`;
 }
 
@@ -1562,11 +1624,12 @@ function fxRow(fx){
       <div class="fx-name"><span class="nm">${esc(fx.teams.away.name)}</span><span class="fx-flag">${a ? esc(a.flag) : "🏳️"}</span></div>
       <div class="fx-meta">${a ? ownerChip(a.owner) : '<span class="fx-noowner">—</span>'}</div>
     </div>`;
+  const midClickable = live || done;
   return `
   <div class="fx-item${live ? " fx-live" : ""}">
     <div class="fx-row">
       ${sideHome}
-      <div class="fx-mid">${scoreLine}${statusLine}</div>
+      <div class="fx-mid${midClickable ? " fx-mid-click" : ""}"${midClickable ? ` data-match="${fx.fixture.id}" title="Tap for goalscorers${live ? " & commentary" : ""}"` : ""}>${scoreLine}${statusLine}</div>
       ${sideAway}
     </div>
     ${venueLine(fx)}
@@ -1950,6 +2013,68 @@ async function shareStandings(){
   }
 }
 
+/* ---------- Match detail: scorers, time played, live commentary ---------- */
+function goalListFor(fx, sum){
+  const idName = { [fx.teams.home.id]: fx.teams.home.name, [fx.teams.away.id]: fx.teams.away.name };
+  const goals = [], cards = [];
+  if (sum && sum.events && sum.events.length){
+    for (const e of sum.events){
+      const team = idName[e.teamId] || "";
+      if (e.kind === "goal") goals.push({ min: e.min, player: e.player, team, detail: e.detail });
+      else cards.push({ min: e.min, player: e.player, team, red: e.kind === "red" });
+    }
+  } else {
+    for (const e of (fx.events || [])){
+      const team = e.team ? e.team.name : "";
+      const min = e.time && e.time.elapsed != null ? e.time.elapsed + "'" : "";
+      if (e.type === "Goal" && e.detail !== "Missed Penalty")
+        goals.push({ min, player: e.player && e.player.name, team, detail: "" });
+      else if (e.type === "Card")
+        cards.push({ min, player: e.player && e.player.name, team, red: e.detail === "Red Card" });
+    }
+  }
+  return { goals, cards };
+}
+function matchModalHtml(fx, sum, loading){
+  const live = isLiveFx(fx), done = isDoneFx(fx);
+  const h = matchTeam(fx.teams.home), a = matchTeam(fx.teams.away);
+  const { goals, cards } = goalListFor(fx, sum);
+  const when = live ? (fx.fixture.status.elapsed != null ? fx.fixture.status.elapsed + "' played" : "In play")
+    : done ? "Full time" : fmtDayTime(kickoff(fx));
+  const goalRow = (g) => `<div class="mx-ev"><span class="mx-min">${esc(g.min || "")}</span><span class="mx-ic">⚽</span>
+    <span class="mx-tx"><b>${esc(g.player || "Goal")}</b>${g.detail ? ` <span class="mx-d">(${esc(g.detail)})</span>` : ""} — ${esc(g.team || "")}</span></div>`;
+  const cardRow = (c) => `<div class="mx-ev"><span class="mx-min">${esc(c.min || "")}</span><span class="mx-ic">${c.red ? "🟥" : "🟨"}</span>
+    <span class="mx-tx">${esc(c.player || "")} — ${esc(c.team || "")}</span></div>`;
+  const goalsHtml = goals.length ? goals.map(goalRow).join("") : `<div class="mx-empty">No goals${live ? " yet" : ""}.</div>`;
+  const cardsHtml = cards.length ? `<div class="mx-sec">Cards</div>` + cards.map(cardRow).join("") : "";
+  const commHtml = sum && sum.commentary && sum.commentary.length
+    ? `<div class="mx-sec">Commentary</div>` + sum.commentary.slice(-20).reverse().map((c) =>
+        `<div class="mx-cm"><span class="mx-min">${esc(c.min || "")}</span><span>${esc(c.text)}</span></div>`).join("")
+    : (live ? `<div class="mx-sec">Commentary</div><div class="mx-empty">${loading ? "Loading commentary…" : "No commentary available for this match."}</div>` : "");
+  return `
+    <button class="modal-close" aria-label="Close">×</button>
+    <div class="mx-head">
+      <div class="mx-team">${esc(h ? h.flag : "🏳️")} <b>${esc(fx.teams.home.name)}</b></div>
+      <div class="mx-score">${live || done ? `${fx.goals.home ?? 0}–${fx.goals.away ?? 0}` : "v"}
+        <span class="mx-when${live ? " live" : ""}">${live ? "🔴 " : ""}${esc(when)}</span></div>
+      <div class="mx-team">${esc(a ? a.flag : "🏳️")} <b>${esc(fx.teams.away.name)}</b></div>
+    </div>
+    ${fx.venue && fx.venue.name ? `<div class="mx-venue">📍 ${esc(fx.venue.city ? fx.venue.name + " · " + fx.venue.city : fx.venue.name)}</div>` : ""}
+    <div class="mx-body">${goalsHtml}${cardsHtml}${commHtml}</div>`;
+}
+let openMatchId = null;
+async function showMatch(fxId){
+  const id = Number(fxId);
+  const fx = state.fixtures.get(id);
+  if (!fx) return;
+  openMatchId = id;
+  const cached = LS.get("api2:summary:" + new URLSearchParams({ event: id }).toString(), null);
+  openModal(matchModalHtml(fx, cached && cached.v, true));
+  // Live → short TTL so commentary stays fresh; finished → cache forever.
+  const sum = await api("summary", { event: id }, isLiveFx(fx) ? 25 * 1000 : Infinity, slimSummary);
+  if (!$("#modal").hidden && openMatchId === id) $("#modalBox").innerHTML = matchModalHtml(fx, sum, false);
+}
+
 /* Heavy DOM rebuilds only happen when something actually changed — polling a
    quiet schedule no longer touches the DOM, which keeps scrolling rock-steady. */
 let lastRenderHash = "";
@@ -2121,6 +2246,8 @@ document.addEventListener("click", (e) => {
   if (statEl){ showStatRank(statEl.dataset.stat); return; }
   const teamEl = e.target.closest("[data-team]");
   if (teamEl){ showTeam(teamEl.dataset.team); return; }
+  const matchEl = e.target.closest("[data-match]");
+  if (matchEl){ showMatch(matchEl.dataset.match); return; }
   const head = e.target.closest(".card-head");
   if (head) showPlayer(head.closest(".card").dataset.name);
 });
