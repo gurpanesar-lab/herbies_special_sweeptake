@@ -769,7 +769,7 @@ function budget(){
    main thread stay tiny (ESPN responses carry megabytes of odds/broadcast data).
    On any failure it returns stale cache (if any) and flips the warning banner. */
 async function api(endpoint, params, ttlMs, transform){
-  const key = "api2:" + endpoint + ":" + new URLSearchParams(params).toString();
+  const key = "api3:" + endpoint + ":" + new URLSearchParams(params).toString();
   const cached = LS.get(key, null);
   const now = Date.now();
   if (cached && (ttlMs === Infinity || now - cached.t < ttlMs)) return cached.v;
@@ -881,7 +881,7 @@ const statsMemo = new Map(); // stats are immutable once fetched — parse them 
 function statsFor(fxId, teamApiId){
   const mk = fxId + ":" + teamApiId;
   if (statsMemo.has(mk)) return statsMemo.get(mk);
-  const cached = LS.get("api2:summary:" + new URLSearchParams({ event: fxId }).toString(), null);
+  const cached = LS.get("api3:summary:" + new URLSearchParams({ event: fxId }).toString(), null);
   const box = cached && cached.v && cached.v.boxscore && cached.v.boxscore.teams;
   if (!box) return null;
   const side = box.find((t) => Number(t.team && t.team.id) === teamApiId);
@@ -964,22 +964,30 @@ function mapStatus(st){
   return s === "in" ? "LIVE" : s === "post" ? "FT" : "NS";
 }
 
-/* ESPN in-play "details" → our event objects (goals + cards). */
+/* ESPN in-play "details" → our event objects (goals + cards).
+   ESPN flags each detail with reliable booleans (scoringPlay/redCard/yellowCard)
+   and names the player in athletesInvolved — far more robust than text-matching. */
+function playerName(d){
+  const a = d.athletesInvolved && d.athletesInvolved[0];
+  return (a && (a.displayName || a.shortName || (a.athlete && a.athlete.displayName))) || "";
+}
 function adaptEvents(comp, homeT, awayT){
   const out = [];
   for (const d of (comp.details || [])){
+    const isGoal = d.scoringPlay === true;
+    const isCard = d.redCard === true || d.yellowCard === true;
+    if (!isGoal && !isCard) continue;
     const txt = (d.type && d.type.text) || "";
-    const isCard = /card/i.test(txt);
-    const isGoal = d.scoringPlay === true || /goal/i.test(txt);
-    if (!isCard && !isGoal) continue;
     let teamId = Number(d.team && d.team.id);
     if (isGoal && /own goal/i.test(txt)) teamId = teamId === homeT.id ? awayT.id : homeT.id;
     const team = teamId === awayT.id ? awayT : homeT;
     out.push({
       type: isCard ? "Card" : "Goal",
-      detail: isCard ? (/red/i.test(txt) ? "Red Card" : "Yellow Card") : "Normal Goal",
-      player: { name: (d.athletesInvolved && d.athletesInvolved[0] && d.athletesInvolved[0].displayName) || "" },
+      detail: isCard ? (d.redCard ? "Red Card" : "Yellow Card")
+        : (/own goal/i.test(txt) ? "Own Goal" : /penalt/i.test(txt) ? "Penalty" : "Normal Goal"),
+      player: { name: playerName(d) },
       time: { elapsed: (d.clock && parseInt(d.clock.displayValue, 10)) || null },
+      clock: (d.clock && d.clock.displayValue) || "",
       team: { id: team.id, name: team.name }
     });
   }
@@ -1045,31 +1053,28 @@ function slimSummary(j){
       });
     }
   } catch (e) { /* no boxscore — stats stay unknown */ }
-  // Goal/card events (scorer + minute + team) for the match-detail modal.
-  const events = [];
+  // ESPN summaries carry a `plays` array (play-by-play). Each play has reliable
+  // boolean flags + athletesInvolved + a `text` description we use as commentary.
+  const events = [], commentary = [];
   try {
-    for (const k of (j.keyEvents || j.scoringPlays || [])){
-      const txt = (k.type && k.type.text) || k.text || "";
-      const isCard = /card/i.test(txt);
-      const isGoal = k.scoringPlay === true || /goal/i.test(txt);
-      if (!isCard && !isGoal) continue;
-      events.push({
-        kind: isCard ? (/red/i.test(txt) ? "red" : "yellow") : "goal",
-        detail: isGoal ? (/own/i.test(txt) ? "Own goal" : /penalt/i.test(txt) ? "Penalty" : "") : "",
-        player: (k.athletesInvolved && k.athletesInvolved[0] && k.athletesInvolved[0].displayName) || "",
-        teamId: Number(k.team && k.team.id) || null,
-        min: (k.clock && k.clock.displayValue) || (k.time && k.time.displayValue) || ""
-      });
+    for (const p of (j.plays || j.commentary || [])){
+      const min = (p.clock && p.clock.displayValue) || (p.time && p.time.displayValue) || "";
+      const isGoal = p.scoringPlay === true;
+      const isCard = p.redCard === true || p.yellowCard === true;
+      if (isGoal || isCard){
+        const txt = (p.type && p.type.text) || "";
+        const a = p.athletesInvolved && p.athletesInvolved[0];
+        events.push({
+          kind: isCard ? (p.redCard ? "red" : "yellow") : "goal",
+          detail: isGoal ? (/own/i.test(txt) ? "Own goal" : /penalt/i.test(txt) ? "Penalty" : "") : "",
+          player: (a && (a.displayName || a.shortName)) || "",
+          teamId: Number(p.team && p.team.id) || null,
+          min
+        });
+      }
+      if (p.text && min) commentary.push({ min, text: p.text });
     }
-  } catch (e) { /* no key events */ }
-  // Text commentary feed (live games).
-  const commentary = [];
-  try {
-    for (const c of (j.commentary || [])){
-      const text = c.text || (c.play && c.play.text) || "";
-      if (text) commentary.push({ min: (c.time && c.time.displayValue) || "", text });
-    }
-  } catch (e) { /* no commentary */ }
+  } catch (e) { /* no plays */ }
   return { boxscore: { teams }, events, commentary };
 }
 function slimStandings(j){
@@ -2130,7 +2135,7 @@ async function showMatch(fxId){
   const fx = state.fixtures.get(id);
   if (!fx) return;
   openMatchId = id;
-  const cached = LS.get("api2:summary:" + new URLSearchParams({ event: id }).toString(), null);
+  const cached = LS.get("api3:summary:" + new URLSearchParams({ event: id }).toString(), null);
   openModal(matchModalHtml(fx, cached && cached.v, true));
   // Live → short TTL so commentary stays fresh; finished → cache forever.
   const sum = await api("summary", { event: id }, isLiveFx(fx) ? 25 * 1000 : Infinity, slimSummary);
@@ -2467,7 +2472,7 @@ async function refresh(){
     if (newStats >= CONFIG.maxSummaryFetchPerCycle) break;
     if (!isDoneFx(fx)) continue;
     if (!(matchTeam(fx.teams.home) || matchTeam(fx.teams.away))) continue;
-    const key = "api2:summary:" + new URLSearchParams({ event: fx.fixture.id }).toString();
+    const key = "api3:summary:" + new URLSearchParams({ event: fx.fixture.id }).toString();
     if (LS.get(key, null)) continue;
     const before = networkCallsThisCycle;
     await api("summary", { event: fx.fixture.id }, Infinity, slimSummary);
