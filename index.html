@@ -369,6 +369,8 @@ button{font-family:inherit;cursor:pointer}
 .ln-evteam{color:var(--muted)}
 .ln-more{margin-top:8px;font-size:.72rem;color:var(--accent);text-align:center;font-weight:700}
 .ln-card[data-match]{cursor:pointer}
+.ln-card.ln-done{opacity:.96}
+.ln-card.ln-done .ln-tag{color:var(--muted)}
 .mx-head{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin:4px 0 2px}
 .mx-team{font-size:1rem;text-align:center}
 .mx-team b{display:block;font-size:.92rem;margin-top:2px}
@@ -920,24 +922,30 @@ function roundForDate(d){
   const w = stageWindows.find((w) => d >= w.start && d <= w.end);
   return w ? w.label : "Group Stage";
 }
-/* Read the actual round/stage straight off the ESPN event (its notes/headlines),
-   rather than guessing from the date. Returns a label stageOf() understands, or
-   null if ESPN didn't label it (then the caller falls back to roundForDate). */
+/* Read the actual round/stage straight off the ESPN event, rather than guessing
+   from the date. ESPN encodes it per-event in `season.slug`, e.g. "group-stage",
+   "round-of-32", "round-of-16", "quarterfinals", "semifinals", "third-place",
+   "final". Returns a label stageOf() understands, or null (→ fall back to date). */
 function roundFromEvent(ev, comp){
+  const slug = String((ev.season && ev.season.slug) || (comp && comp.season && comp.season.slug) || "").toLowerCase();
+  if (slug){
+    if (slug.includes("group")) return "Group Stage";
+    if (slug.includes("round-of-16") || slug.includes("round of 16")) return "Round of 16";
+    if (slug.includes("round-of-32") || slug.includes("round of 32")) return "Round of 32";
+    if (slug.includes("quarter")) return "Quarterfinal";
+    if (slug.includes("semi")) return "Semifinal";
+    if (slug.includes("third") || slug.includes("3rd")) return "3rd Place";
+    if (slug.includes("final")) return "Final";
+  }
+  // Fallback: scan any notes/headlines ESPN occasionally provides.
   const texts = [];
   const push = (v) => { if (v && typeof v === "string") texts.push(v); };
   for (const n of (comp.notes || [])) { push(n.headline); push(n.text); }
   for (const n of (ev.notes || [])) { push(n.headline); push(n.text); }
-  push(comp.type && comp.type.text);
-  push(ev.season && ev.season.type && ev.season.type.name);
   const s = texts.join(" | ").toLowerCase();
-  // Group games are explicitly "Group X" / "Matchday N" — classify those first
-  // so a stray word can't bump them into the knockouts.
   if (/matchday|group\s+stage|group\s+[a-l]\b/.test(s)) return "Group Stage";
-  // Knockout phrases → return the specific note so stageOf() can grade it.
-  if (/round of|rd of|quarter|semi|3rd place|third place|\bfinal\b/.test(s)){
+  if (/round of|rd of|quarter|semi|3rd place|third place|\bfinal\b/.test(s))
     return texts.find((t) => /round of|rd of|quarter|semi|3rd|third|\bfinal\b/i.test(t)) || null;
-  }
   return null;
 }
 
@@ -1385,13 +1393,17 @@ function liveNowCard(fx){
       });
     detail = rows.join("");
   }
-  const score = live || isDoneFx(fx) ? `${fx.goals.home ?? 0} – ${fx.goals.away ?? 0}` : "v";
+  const done = isDoneFx(fx);
+  const score = live || done ? `${fx.goals.home ?? 0} – ${fx.goals.away ?? 0}` : "v";
   const status = live
     ? esc(fx.fixture.status.elapsed != null ? fx.fixture.status.elapsed + "'" : (fxStatus(fx) === "HT" ? "Half-time" : "In play"))
-    : esc(fmtDayTime(kickoff(fx)) + (fx.league.round ? " · " + fx.league.round : ""));
+    : done
+      ? "Full time" + (fx.league.round && stageOf(fx.league.round) ? " · " + esc(fx.league.round) : "")
+      : esc(fmtDayTime(kickoff(fx)) + (fx.league.round ? " · " + fx.league.round : ""));
+  const tag = live ? '<span class="live-dot">🔴</span> LIVE' : done ? "🏁 RESULT" : "⏰ UP NEXT";
 
-  return `<div class="ln-card${live ? " live" : ""}"${live ? ` data-match="${fx.fixture.id}"` : ""}>
-    <div class="ln-tag">${live ? '<span class="live-dot">🔴</span> LIVE' : "⏰ UP NEXT"}</div>
+  return `<div class="ln-card${live ? " live" : done ? " ln-done" : ""}"${live || done ? ` data-match="${fx.fixture.id}"` : ""}>
+    <div class="ln-tag">${tag}</div>
     <div class="ln-teams">
       ${side(fx.teams.home, h)}
       <div class="ln-score scoreboard">${score}</div>
@@ -1400,30 +1412,36 @@ function liveNowCard(fx){
     <div class="ln-when">${status}</div>
     ${fx.venue && fx.venue.name ? `<div class="ln-venue">📍 ${esc(fx.venue.city ? fx.venue.name + " · " + fx.venue.city : fx.venue.name)}</div>` : ""}
     ${detail ? `<div class="ln-detail">${detail}</div>` : ""}
-    ${live ? `<div class="ln-more">Tap for commentary →</div>` : ""}
+    ${live ? `<div class="ln-more">Tap for commentary →</div>` : done ? `<div class="ln-more">Tap for goalscorers →</div>` : ""}
   </div>`;
 }
 
 function renderLiveNow(){
   const owned = (fx) => matchTeam(fx.teams.home) || matchTeam(fx.teams.away);
-  // Live first: any match with at least one owned team currently in play.
-  let list = allFixtures().filter((fx) => isLiveFx(fx) && owned(fx)).sort((a, b) => kickoff(a) - kickoff(b));
-  let live = true;
-  // Nothing live → fall back to the next few upcoming owned-team fixtures.
-  if (!list.length){
-    const now = Date.now();
-    list = allFixtures()
-      .filter((fx) => !isDoneFx(fx) && !isLiveFx(fx) && kickoff(fx).getTime() > now && owned(fx))
-      .sort((a, b) => kickoff(a) - kickoff(b)).slice(0, 4);
-    live = false;
+  const now = Date.now();
+  // Top-of-page strip: live games first, then the most recent results, then,
+  // if nothing's on, the next kick-offs. Focused on the players' own teams.
+  const liveList = allFixtures().filter((fx) => isLiveFx(fx) && owned(fx)).sort((a, b) => kickoff(a) - kickoff(b));
+  const results = allFixtures().filter((fx) => isDoneFx(fx) && owned(fx)).sort((a, b) => kickoff(b) - kickoff(a)).slice(0, 4);
+  const upNext = allFixtures().filter((fx) => !isDoneFx(fx) && !isLiveFx(fx) && kickoff(fx).getTime() > now && owned(fx))
+    .sort((a, b) => kickoff(a) - kickoff(b)).slice(0, 3);
+
+  let cards, title;
+  if (liveList.length){
+    cards = liveList.concat(results.slice(0, 3));        // live first, then latest results
+    title = `<span class="live-dot">🔴</span> Live &amp; Latest`;
+  } else if (results.length){
+    cards = results.concat(upNext.slice(0, 2));          // no live → latest results, then what's next
+    title = `🏁 Latest Results`;
+  } else {
+    cards = upNext;
+    title = `⏳ Up Next`;
   }
   const panel = $("#liveNow");
-  panel.hidden = !list.length;
-  if (!list.length) return;
-  $("#liveNowTitle").innerHTML = live
-    ? `<span class="live-dot">🔴</span> Live Now`
-    : `⏳ Up Next`;
-  $("#liveNowList").innerHTML = list.map(liveNowCard).join("");
+  panel.hidden = !cards.length;
+  if (!cards.length) return;
+  $("#liveNowTitle").innerHTML = title;
+  $("#liveNowList").innerHTML = cards.map(liveNowCard).join("");
 }
 
 /* ---------- Head-to-head spotlight ---------- */
