@@ -558,7 +558,7 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;font-size:.72rem;color
   <section class="panel">
     <h2>📅 Fixtures &amp; Results</h2>
     <div class="tabs" role="tablist">
-      <button class="tab active" data-tab="today" role="tab">Today</button>
+      <button class="tab active" data-tab="latest" role="tab">Latest</button>
       <button class="tab" data-tab="upcoming" role="tab">Upcoming</button>
       <button class="tab" data-tab="results" role="tab">Results</button>
     </div>
@@ -743,7 +743,7 @@ const state = {
   prevTotals: new Map(),   // for count-up animations (grid)
   lbTotals: {},            // count-up baseline (leaderboard)
   lbOrder: LS.get("lbOrder", null),  // previous rank order, for ▲▼ deltas
-  fxTab: "today",
+  fxTab: "latest",
   spotIndex: 0,
   spotMatches: [],
   pollTimer: null,
@@ -920,6 +920,26 @@ function roundForDate(d){
   const w = stageWindows.find((w) => d >= w.start && d <= w.end);
   return w ? w.label : "Group Stage";
 }
+/* Read the actual round/stage straight off the ESPN event (its notes/headlines),
+   rather than guessing from the date. Returns a label stageOf() understands, or
+   null if ESPN didn't label it (then the caller falls back to roundForDate). */
+function roundFromEvent(ev, comp){
+  const texts = [];
+  const push = (v) => { if (v && typeof v === "string") texts.push(v); };
+  for (const n of (comp.notes || [])) { push(n.headline); push(n.text); }
+  for (const n of (ev.notes || [])) { push(n.headline); push(n.text); }
+  push(comp.type && comp.type.text);
+  push(ev.season && ev.season.type && ev.season.type.name);
+  const s = texts.join(" | ").toLowerCase();
+  // Group games are explicitly "Group X" / "Matchday N" — classify those first
+  // so a stray word can't bump them into the knockouts.
+  if (/matchday|group\s+stage|group\s+[a-l]\b/.test(s)) return "Group Stage";
+  // Knockout phrases → return the specific note so stageOf() can grade it.
+  if (/round of|rd of|quarter|semi|3rd place|third place|\bfinal\b/.test(s)){
+    return texts.find((t) => /round of|rd of|quarter|semi|3rd|third|\bfinal\b/i.test(t)) || null;
+  }
+  return null;
+}
 
 function mapStatus(st){
   const n = (st && st.type && st.type.name) || "";
@@ -1073,7 +1093,9 @@ function adaptEspn(ev){
   } : null;
   return {
     fixture: { id: Number(ev.id), date: ev.date, status: { short, elapsed: LIVE_STATUSES.has(short) ? elapsed : null } },
-    league: { id: 606, round: roundForDate(new Date(ev.date)) },
+    // Round/stage: trust ESPN's own per-match label first (reliable across the
+    // group→knockout boundary); only fall back to date windows if it's missing.
+    league: { id: 606, round: roundFromEvent(ev, comp) || roundForDate(new Date(ev.date)) },
     venue,
     teams: { home: homeT, away: awayT },
     goals: { home: hc.score != null ? Number(hc.score) : null, away: ac.score != null ? Number(ac.score) : null },
@@ -1180,7 +1202,12 @@ function computeModel(){
   // ties progressively, so if a team shows up in one later, they come straight
   // back. (Knockout losers are already eliminated in the loop above.)
   const groupWindows = stageWindows.filter((w) => !stageOf(w.label));
-  const groupEnd = groupWindows.length ? Math.max(...groupWindows.map((w) => +w.end)) : null;
+  const winEnd = groupWindows.length ? Math.max(...groupWindows.map((w) => +w.end)) : null;
+  // Fallback when the calendar is missing/misaligned: use the last GROUP fixture's
+  // kick-off (+3h) so elimination still fires the moment the group stage ends.
+  const groupKicks = fixtures.filter((fx) => !stageOf(fx.league.round)).map((fx) => kickoff(fx).getTime());
+  const fxEnd = groupKicks.length ? Math.max(...groupKicks) + 3 * 3600 * 1000 : null;
+  const groupEnd = winEnd || fxEnd;
   if (groupEnd && Date.now() > groupEnd){
     for (const ts of T.values()){
       const inKnockouts = fixtures.some((fx) => stageOf(fx.league.round) &&
@@ -1638,15 +1665,22 @@ function fxRow(fx){
 
 function renderFixtures(){
   const all = allFixtures().sort((a, b) => kickoff(a) - kickoff(b));
-  const today = ukDateKey(new Date());
+
+  // "Latest" feed: live games + newest results at the top, then older results,
+  // then upcoming — each under its own heading.
+  if (state.fxTab === "latest"){
+    const live = all.filter(isLiveFx).sort((a, b) => kickoff(a) - kickoff(b));
+    const done = all.filter(isDoneFx).sort((a, b) => kickoff(b) - kickoff(a)).slice(0, 14);
+    const upcoming = all.filter((fx) => fxStatus(fx) === "NS" && kickoff(fx) > new Date()).slice(0, 10);
+    const section = (title, rows) => rows.length
+      ? `<div class="fx-day">${esc(title)}</div>` + rows.map(fxRow).join("") : "";
+    const html = section("🔴 Live now", live) + section("Latest results", done) + section("Coming up", upcoming);
+    $("#fixturesList").innerHTML = html || `<div class="fx-empty">No fixtures yet — kick-off soon. 🍺</div>`;
+    return;
+  }
+
   let list = [], empty = "";
-  if (state.fxTab === "today"){
-    // Order: live matches first, then today's finished results, then what's still to come.
-    const rank = (fx) => isLiveFx(fx) ? 0 : isDoneFx(fx) ? 1 : 2;
-    list = all.filter((fx) => ukDateKey(kickoff(fx)) === today)
-      .sort((a, b) => (rank(a) - rank(b)) || (kickoff(a) - kickoff(b)));
-    empty = "No matches today — rest day. Hydrate. 🍺";
-  } else if (state.fxTab === "upcoming"){
+  if (state.fxTab === "upcoming"){
     list = all.filter((fx) => fxStatus(fx) === "NS" && kickoff(fx) > new Date()).slice(0, 18);
     empty = "No upcoming fixtures found yet.";
   } else {
@@ -1736,15 +1770,25 @@ function renderBracket(){
    step isn't applied; correct the rare edge case via the admin panel). */
 function computeTables(){
   const acc = {}; // letter -> { normName -> row }
+  // Collect each team's GROUP fixtures only, then count just their first three
+  // (a team plays exactly 3 group games — this guarantees the table never shows
+  // a 4th "played" even if a knockout tie were ever mislabelled).
+  const perTeam = {}; // normName -> [{fx, side, apiT, letter}]
   for (const fx of allFixtures()){
-    if (stageOf(fx.league.round)) continue;                 // group stage only
+    if (stageOf(fx.league.round)) continue;                 // skip knockouts entirely
     for (const side of ["home", "away"]){
       const apiT = fx.teams[side];
       const letter = state.groups[norm(apiT.name)];
       if (!letter) continue;
+      (perTeam[norm(apiT.name)] || (perTeam[norm(apiT.name)] = [])).push({ fx, side, apiT, letter });
+    }
+  }
+  for (const [k, entries] of Object.entries(perTeam)){
+    entries.sort((a, b) => kickoff(a.fx) - kickoff(b.fx));
+    for (let idx = 0; idx < entries.length && idx < 3; idx++){      // hard cap: 3 group games
+      const { fx, side, apiT, letter } = entries[idx];
       const tbl = acc[letter] || (acc[letter] = {});
-      const row = tbl[norm(apiT.name)] ||
-        (tbl[norm(apiT.name)] = { name: apiT.name, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 });
+      const row = tbl[k] || (tbl[k] = { name: apiT.name, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 });
       // Finished games count for real; live games count provisionally so the
       // table moves with the match (it self-corrects at full-time).
       if ((isDoneFx(fx) || isLiveFx(fx)) && fx.goals[side] != null){
