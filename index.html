@@ -666,7 +666,7 @@ const CONFIG = {
   scheduleTtlMs: 10 * 60 * 1000,      // scoreboard cache lifetime otherwise
   standingsTtlMs: 6 * 60 * 60 * 1000, // group letters, 6-hourly
   dailyRequestBudget: 2000,    // safety net only — ESPN has no hard daily quota
-  maxSummaryFetchPerCycle: 6,  // max NEW match-summary calls per refresh cycle
+  summaryConcurrency: 8,       // parallel match-summary fetches (cached forever once fetched, fetch-all per cycle)
   adminPass: "corner-flag",    // ?admin=true passphrase — change me!
   tournamentName: "World Cup 2026 Sweepstake",  // used in share card + recap
   tournamentStart: "2026-06-11",
@@ -795,6 +795,20 @@ async function api(endpoint, params, ttlMs, transform){
     state.degraded = true;
     return cached ? cached.v : null;
   }
+}
+
+/* Run `worker` over `items` with at most `limit` in flight at once. Resolves
+   when all are done. Used to fetch every missing match summary in one cycle
+   without firing dozens of requests simultaneously. */
+async function runPool(items, limit, worker){
+  const queue = items.slice();
+  const runners = Array.from({ length: Math.min(limit, queue.length) }, async () => {
+    while (queue.length){
+      const item = queue.shift();
+      try { await worker(item); } catch(e){ /* one bad fetch must not stall the pool */ }
+    }
+  });
+  await Promise.all(runners);
 }
 
 /* ============================================================
@@ -2465,18 +2479,27 @@ async function refresh(){
     for (const fx of (sb.fixtures || [])) state.fixtures.set(fx.fixture.id, fx);
   }
 
+  // Paint immediately with whatever's already cached, so a fresh load isn't
+  // blank while the summaries below are fetched.
+  computeModel();
+  renderAll();
+
   // 2) Match summaries (cards + saves where ESPN provides them) for finished
   //    games we haven't stored yet — fetched once per match, cached forever.
-  let newStats = 0;
-  for (const fx of allFixtures()){
-    if (newStats >= CONFIG.maxSummaryFetchPerCycle) break;
-    if (!isDoneFx(fx)) continue;
-    if (!(matchTeam(fx.teams.home) || matchTeam(fx.teams.away))) continue;
+  //    We fetch EVERY missing summary this cycle (bounded concurrency), not a
+  //    capped handful. Otherwise card/save points trickle in over many polls,
+  //    so totals climb on every reload and two devices show different numbers
+  //    until each has independently caught up. Fetching them all makes every
+  //    device converge on the SAME complete totals after one full cycle.
+  const pendingSummaries = allFixtures().filter((fx) => {
+    if (!isDoneFx(fx)) return false;
+    if (!(matchTeam(fx.teams.home) || matchTeam(fx.teams.away))) return false;
     const key = "api3:summary:" + new URLSearchParams({ event: fx.fixture.id }).toString();
-    if (LS.get(key, null)) continue;
-    const before = networkCallsThisCycle;
-    await api("summary", { event: fx.fixture.id }, Infinity, slimSummary);
-    if (networkCallsThisCycle > before) newStats++;
+    return !LS.get(key, null);
+  });
+  if (pendingSummaries.length){
+    await runPool(pendingSummaries, CONFIG.summaryConcurrency, (fx) =>
+      api("summary", { event: fx.fixture.id }, Infinity, slimSummary));
   }
 
   // 3) Group letters + real group tables from standings. Refreshed faster
